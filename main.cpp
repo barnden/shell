@@ -51,7 +51,7 @@ int main(int argc, int*argv[]) {
 
         add_history(input);
 
-        BShell::parse$input(const_cast<const char*>(input));
+        BShell::input$parse(const_cast<const char*>(input));
 
         free(input);
     }
