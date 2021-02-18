@@ -2,10 +2,12 @@
 #include <cstring>
 #include <string>
 #include <unordered_set>
-#include <stdio.h>
-#include <unistd.h>
+
 #include <sys/types.h>
+#include <sys/stat.h>
+#include <stdio.h>
 #include <pwd.h>
+#include <unistd.h>
 
 #include "Shell.h"
 
@@ -112,5 +114,25 @@ void handle$keyword(KEYWORD kw, const char*argc) {
             << "\"\n";
         break;
     }
+}
+
+std::string get$executable_path(std::string cmd) {
+    // Scans the path for executables that match the given string
+
+    auto env_path = std::string(getenv("PATH"));
+    auto path = std::string {};
+
+    auto i = size_t {}, j = env_path.find(':');
+
+    for (; j != std::string::npos; j = env_path.find(':', i = j + 1)) {
+        auto tmp = env_path.substr(i, j - i) + "/" + cmd;
+
+        if (access(tmp.c_str(), X_OK) != -1) {
+            path = tmp;
+            break;
+        }
+    }
+
+    return path;
 }
 }
