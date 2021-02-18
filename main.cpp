@@ -17,15 +17,6 @@
 // the programmer documentation is found below.
 // https://tiswww.case.edu/php/chet/readline/readline.html#IDX338
 
-
-void delete_children(BShell::Expression*expr){
-    if (expr->children.size())
-        for (auto*child : expr->children)
-            delete_children(child);
-
-    delete expr;
-}
-
 int main(int argc, int*argv[]) {
     // I can't find any resources on whether this is actually "safe", as cannot use the
     // GNU readline library in the BShell::handler$posix_sig(int) function, as readline
@@ -46,8 +37,6 @@ int main(int argc, int*argv[]) {
     auto ** hlist = history_list();
     stifle_history(64);
 
-    auto asts = std::vector<BShell::Expression*> {};
-
     // Continually prompt the user for input
     while (true) {
         auto*input = readline(BShell::get$PS1().c_str());
@@ -57,10 +46,13 @@ int main(int argc, int*argv[]) {
 
         add_history(input);
 
-        const auto tokens = BShell::input$tokenize(const_cast<const char*>(input));
-        asts = BShell::input$parse(tokens);
+        auto tokens = BShell::input$tokenize(const_cast<const char*>(input));
+        auto asts = BShell::input$parse(tokens);
 
         std::cout << "AST count " << asts.size() << '\n';
+
+        for (auto*ast : asts)
+            BShell::ast$delete_children(ast);
 
         free(input);
     }
@@ -71,9 +63,6 @@ int main(int argc, int*argv[]) {
     // session's commands a la bash.
     free(hstate);
     free(hlist);
-
-    for (auto*ast : asts)
-        delete_children(ast);
 
     std::cout << "brandon shell exited\n";
 

@@ -10,12 +10,15 @@ extern std::unordered_set<std::string> KEYWORDS;
 
 struct Expression {
     Expression();
-    Expression(Token*);
+    Expression(Token);
 
     std::vector<Expression*> children;
-    Token* token;
+    Token token;
 };
 
-std::vector<Expression*> input$parse(const std::vector<Token>);
+std::vector<Expression*> input$parse(std::vector<Token>&);
+
 bool keywords$contains(std::string);
+
+void ast$delete_children(Expression*);
 }

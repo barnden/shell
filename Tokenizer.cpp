@@ -63,7 +63,7 @@ std::vector<Token> input$tokenize(const char*inp) {
         }
     }
 
-    auto add_quote = [&](int index, int mask) -> bool {
+    auto add_quote = [&add_token, &enquote, &quotes, &str_buf](int index, int mask) -> bool {
         auto ret = false;
         quotes[index] += !(enquote() & mask);
 
@@ -115,6 +115,9 @@ std::vector<Token> input$tokenize(const char*inp) {
             break;
             case '`': if (add_quote(2, 3)) continue;
             break;
+            case '$':
+                // if (next && *next == '(');
+            break;
             case '>': case '<': case '|':
             case '=': case ';': case '&': {
                 if (enquote()) break;
@@ -130,8 +133,6 @@ std::vector<Token> input$tokenize(const char*inp) {
                         if (!force_string) {
                             type = EQUAL;
                             ff_string = true;
-
-                            handle$str_buf();
                         } else pass = true;
                     break;
                     case ';': type = SEQUENTIAL; break;
@@ -146,9 +147,10 @@ std::vector<Token> input$tokenize(const char*inp) {
                 }
 
                 if (!pass) {
+                    handle$str_buf();
                     force_string = ff_string;
 
-                    add_token(Token { type, str_buf });
+                    add_token(Token { type, "" });
                     continue;
                 } else break;
             }

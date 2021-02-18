@@ -2,6 +2,8 @@
 
 #include <vector>
 
+#include "Parser.h"
+
 namespace BShell {
 struct Process {
     pid_t pid;
@@ -23,4 +25,6 @@ std::string get$executable_path(std::string);
 
 void handle$keyword(KEYWORD, const char*);
 void set$cwd(std::string);
+
+void execute(std::vector<Expression*> asts);
 }
