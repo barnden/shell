@@ -4,7 +4,7 @@ all: Tokenizer.o Parser.o PromptString.o Shell.o Terminal.o main.o
 	g++ $(CXX_FLAGS) -o shell Tokenizer.o Parser.o Terminal.o Shell.o PromptString.o main.o -lreadline
 
 main.o: main.cpp
-	g++ $(CXX_FLAGS) -c main.cpp -lreadline
+	g++ $(CXX_FLAGS) -c main.cpp
 
 Shell.o: Shell.h Shell.cpp
 	g++ $(CXX_FLAGS) -c Shell.cpp

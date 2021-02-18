@@ -17,6 +17,15 @@
 // the programmer documentation is found below.
 // https://tiswww.case.edu/php/chet/readline/readline.html#IDX338
 
+
+void delete_children(BShell::Expression*expr){
+    if (expr->children.size())
+        for (auto*child : expr->children)
+            delete_children(child);
+
+    delete expr;
+}
+
 int main(int argc, int*argv[]) {
     // I can't find any resources on whether this is actually "safe", as cannot use the
     // GNU readline library in the BShell::handler$posix_sig(int) function, as readline
@@ -37,13 +46,10 @@ int main(int argc, int*argv[]) {
     auto ** hlist = history_list();
     stifle_history(64);
 
+    auto asts = std::vector<BShell::Expression*> {};
+
     // Continually prompt the user for input
     while (true) {
-        // GNU readline reads from STDIN as char*, allocating the C string with malloc
-        // The advantage over std::getline or (>>) from std::cin is that readline
-        // allows the user to use control keys like the arrows or home keys to modify
-        // their given input, rather than putting a control https://tiswww.case.edu/php/chet/readline/readline.html#IDX338sequence, i.e. [[D instead
-        // of moving the cursor to the left.
         auto*input = readline(BShell::get$PS1().c_str());
 
         // CTRL+D causes terminal to send EOF which GNU readline interprets as NULL
@@ -51,7 +57,10 @@ int main(int argc, int*argv[]) {
 
         add_history(input);
 
-        BShell::input$parse(const_cast<const char*>(input));
+        const auto tokens = BShell::input$tokenize(const_cast<const char*>(input));
+        asts = BShell::input$parse(tokens);
+
+        std::cout << "AST count " << asts.size() << '\n';
 
         free(input);
     }
@@ -62,6 +71,9 @@ int main(int argc, int*argv[]) {
     // session's commands a la bash.
     free(hstate);
     free(hlist);
+
+    for (auto*ast : asts)
+        delete_children(ast);
 
     std::cout << "brandon shell exited\n";
 
