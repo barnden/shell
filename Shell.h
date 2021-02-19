@@ -17,12 +17,6 @@ struct Process {
     Pipe pipe;
 };
 
-extern std::vector<Process> processes;
-
-// TODO: Implement $? and $! to get the exit code of processes.
-extern int fg_exit; // $?
-extern int bg_exit; // $!
-
 enum KEYWORD {
     UNKNOWN,
     EXPORT,
@@ -41,4 +35,10 @@ void set$cwd(std::string);
 void edproc();
 
 void handle$ast(Expression*);
+
+extern std::vector<Process> processes;
+
+// TODO: Implement $? and $! to get the exit code of processes.
+extern int fg_exit; // $?
+extern int bg_exit; // $!
 }

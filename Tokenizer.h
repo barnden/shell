@@ -5,8 +5,6 @@
 #include <unordered_set>
 
 namespace BShell {
-extern std::unordered_set<std::string> g_keywords;
-
 enum TokenType : uint8_t {
     NullToken,      // null token
     String,         // a string
@@ -48,4 +46,6 @@ private:
 
 std::ostream& operator<<(std::ostream&, const Token&);
 std::ostream& operator<<(std::ostream&, const TokenType&);
+
+extern std::unordered_set<std::string> g_keywords;
 }

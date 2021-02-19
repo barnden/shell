@@ -70,7 +70,7 @@ int main(int argc, int*argv[]) {
         BShell::edproc();
 
         auto tokens = BShell::Tokenizer(const_cast<const char*>(input)).tokens();
-        auto asts = BShell::input$parse(tokens);
+        auto asts = BShell::Parser(tokens).asts();
 
         for (auto*ast : asts) {
             BShell::handle$ast(ast);

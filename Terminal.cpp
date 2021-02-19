@@ -1,8 +1,6 @@
-#include <iostream>
-#include <signal.h>
-#include <stdio.h>
-
+#include <string>
 #include <readline/readline.h>
+#include <stdio.h>
 
 #include "PromptString.h"
 #include "Terminal.h"

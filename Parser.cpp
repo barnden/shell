@@ -1,12 +1,11 @@
 #include <string>
 #include <iostream>
-#include <unistd.h>
+#include <vector>
 
 #include "Tokenizer.h"
 #include "Parser.h"
-#include "Shell.h"
 
-#define PARSE_ERR(msg) std::cerr << #msg << '\n';
+#define PARSER_ERR(msg) std::cerr << msg << '\n'; m_err = true;
 #define EMPTY_AST\
     [&]() -> std::vector<Expression*> {\
         for (auto&ast : asts) ast$delete_children(ast);\
@@ -22,104 +21,102 @@ namespace BShell {
 Expression::Expression() {}
 Expression::Expression(Token token) : token(token) {}
 
-const Token* next$pk(const std::vector<Token>&tokens, const Token*cur) {
-    if (&*tokens.end() != ++cur)
-        return cur;
-
-    return nullptr;
+Parser::Parser(std::vector<Token>&tokens) :
+    m_tokens(tokens),
+    m_prev(),
+    m_cur(),
+    m_next(),
+    m_asts(),
+    m_err()
+{
+    parse();
 }
 
-const Token* prev$pk(const std::vector<Token>&tokens, const Token*cur) {
-    if (&*tokens.begin() != --cur)
-        return cur;
-    
-    return nullptr;
-}
+std::vector<Expression*> Parser::asts() const { return m_asts; }
 
-Expression* parse$executable(
-    const std::vector<Token>&tokens,
-    Token**cur
-) {
-    auto expr = new Expression(**cur);
-    const Token*next = nullptr;
+void Parser::parse_executable() {
+    auto expr = new Expression(*m_cur);
 
-    while ((next = next$pk(tokens, *cur)) != nullptr && next->type == String) {
-        expr->children.push_back(new Expression(*next));
-        (*cur)++;
+    while ((m_next = peek()) != nullptr && m_next->type == String) {
+        expr->children.push_back(new Expression(*m_next));
+        m_cur++;
     }
 
-    return expr;
+    m_asts.push_back(expr);
 }
 
-Expression* parse$background(
-    const std::vector<Token>&tokens,
-    std::vector<Expression*>&asts,
-    Token**cur
-) {
-    Expression*expr = nullptr;
+void Parser::parse_background() {
+    Expression* expr = nullptr;
 
-    if (asts.size() && asts.back()->token.type == Executable) {
-        expr = new Expression(**cur);
+    if (m_asts.size() && m_asts.back()->token.type == Executable) {
+        expr = new Expression(*m_cur);
 
-        expr->children.push_back(asts.back());
+        expr->children.push_back(m_asts.back());
 
-        asts.pop_back();
-    } else PARSE_ERR(Syntax error near unexpected token '&'.)
-
-    return expr;
+        m_asts.pop_back();
+        m_asts.push_back(expr);
+    } else PARSER_ERR("Syntax error near unexpected token '&'.");
 }
 
-Expression* parse$pipe(
-    const std::vector<Token>&tokens,
-    std::vector<Expression*>&asts,
-    Token**cur
-) {
-    Expression*expr = nullptr;
+void Parser::parse_pipe() {
+    Expression* expr = nullptr;
 
-    if (asts.size() && asts.back()->token.type == Executable) {
-        auto*next = next$pk(tokens, (*cur)++);
-
-        if (next == nullptr || next->type != Executable) {
+    if (m_asts.size() && m_asts.back()->token.type != String) {
+        if (m_next == nullptr || m_next->type != Executable) {
             // We do not currently support a continuation prompt
-            PARSE_ERR(Syntax error at unexpected token '|'.);
-
-            return nullptr;
+            PARSER_ERR("Syntax error at unexpected token '|'.");
+            return;
         }
 
-        expr = new Expression(**cur);
+        expr = new Expression(*m_cur);
 
-        expr->children.push_back(asts.back());
-        expr->children.push_back(new Expression(*next));
+        expr->children.push_back(m_asts.back());
+        expr->children.push_back(new Expression(*m_next));
 
-        asts.pop_back();
-    } else PARSE_ERR(Syntax error near unexpected token '|'.);
-
-    return expr;
+        m_asts.pop_back();
+        m_asts.push_back(expr);
+    } else PARSER_ERR("Syntax error near unexpected token '|'.");
 }
 
-std::vector<Expression*> input$parse(std::vector<Token>&tokens) {
-    auto asts = std::vector<Expression*> {};
-    if (!tokens.size()) return EMPTY_AST;
+void Parser::parse() {
+    if (!m_tokens.size()) return;
 
-    auto*cur = &*tokens.begin();
+    m_cur = &*m_tokens.begin();
 
-    for (; cur < &*tokens.end(); cur++) {
+    for (; m_cur < &*m_tokens.end(); m_cur++) {
+        if (m_err) {
+            for (auto& ast : m_asts)
+                ast$delete_children(ast);
+
+            m_asts = std::vector<Expression*> {};
+            return;
+        }
+
         Expression*expr = nullptr;
 
-        switch (cur->type) {
+        m_next = peek();
+        m_prev = peek_back();
+
+        switch (m_cur->type) {
             case Executable:
-                ADD_NOT_EMPTY_EARLY_RETURN(parse$executable(tokens, &cur))
+                parse_executable();
                 continue;
             case RedirectPipe:
-                ADD_NOT_EMPTY_EARLY_RETURN(parse$pipe(tokens, asts, &cur))
+                parse_pipe();
                 continue;
             case Background:
-                ADD_NOT_EMPTY_EARLY_RETURN(parse$background(tokens, asts, &cur))
+                parse_background();
                 continue;
         }
     }
+}
 
-    return asts;
+Token* Parser::peek() {
+    return  &*m_tokens.end() != m_cur + 1 ? m_cur + 1 : nullptr;
+}
+
+Token* Parser::peek_back() {
+    return &*m_tokens.begin() != m_cur - 1 ? m_cur - 1 : nullptr;
 }
 
 void ast$delete_children(Expression*expr){

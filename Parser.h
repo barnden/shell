@@ -1,13 +1,10 @@
 #pragma once
 
-#include <unordered_set>
 #include <vector>
 
 #include "Tokenizer.h"
 
 namespace BShell {
-extern std::unordered_set<std::string> KEYWORDS;
-
 struct Expression {
     Expression();
     Expression(Token);
@@ -16,9 +13,25 @@ struct Expression {
     Token token;
 };
 
-std::vector<Expression*> input$parse(std::vector<Token>&);
+class Parser {
+public:
+    Parser(std::vector<Token>&);
+    std::vector<Expression*> asts() const;
+private:
+    void parse();
+    void parse_executable();
+    void parse_pipe();
+    void parse_background();
+    Token* peek();
+    Token* peek_back();
 
-bool keywords$contains(std::string);
+    bool m_err;
+    Token *m_cur, *m_prev, *m_next;
+    std::vector<Expression*> m_asts;
+    std::vector<Token>&m_tokens;
+};
+
+std::vector<Expression*> input$parse(std::vector<Token>&);
 
 void ast$delete_children(Expression*);
 }

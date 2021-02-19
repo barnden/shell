@@ -1,14 +1,11 @@
-#include <cstring>
 #include <fstream>
 #include <iostream>
-#include <string>
 #include <sstream>
-#include <unordered_set>
+#include <string>
+#include <vector>
 
-#include <sys/types.h>
-#include <sys/stat.h>
+#include <string.h>
 #include <sys/wait.h>
-#include <stdio.h>
 #include <pwd.h>
 #include <unistd.h>
 
@@ -208,7 +205,7 @@ void handle$executable(Expression*expr) {
 void handle$background(Expression*expr) {
     auto proc = execute(expr->children[0]);
 
-    std::cout << '[' << processes.size() << "] " << proc.pid << '\n';
+    std::cout << '[' << processes.size() + 1 << "] " << proc.pid << '\n';
 
     waitpid(proc.pid, &bg_exit, WNOHANG);
     processes.push_back(Process { proc.pid, proc.name });
