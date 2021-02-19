@@ -4,22 +4,22 @@
 #include <vector>
 #include <unordered_set>
 
-#define DEBUG_TOKENIZER
-
 namespace BShell {
-extern std::unordered_set<std::string> KEYWORDS;
+extern std::unordered_set<std::string> g_keywords;
+
 enum TokenType : uint8_t {
-    NTOKEN,         // null token
-    STRING,         // a string
-    EQUAL,          // equal symbol, typically used for setting env variables
-    EXECUTABLE,     // executable
-    BACKGROUND,     // modifier for executable, backgrounded process (&)
-    SEQUENTIAL,     // modifier for executable, sequential execution (;)
-    SEQUENTIAL_CON, // modifier for executable, conditional sequential execution (&&)
-    PIPE,           // pipe stdout to another process stdin (|)
-    REDIRECT_OUT,   // redirect out (>)
-    REDIRECT_IN,    // redirect in (<)
-    KEY,            // keyword for shell (cd, ?export)
+    NullToken,      // null token
+    String,         // a string
+    Equal,          // equal symbol, typically used for setting env variables
+    Executable,     // executable
+    Background,     // backgrounded process (&)
+    Sequential,     // sequential execution (;)
+    SequentialIf,   // conditional sequential execution (&&)
+    RedirectPipe,   // pipe stdout to another process stdin (|)
+    RedirectOut,    // redirect out (>)
+    RedirectIn,     // redirect in (<)
+    Key,            // keyword for shell (cd, ?export)
+    Eval            // eval string (enclosed in backticks or "$()")
 };
 
 struct Token {
@@ -27,10 +27,25 @@ struct Token {
     std::string content;
 };
 
-std::vector<Token> input$tokenize(const char*);
+class Tokenizer {
+public:
+    Tokenizer(const char*);
 
-#ifdef DEBUG_TOKENIZER
+    std::vector<Token> tokens() const;
+private:
+    void tokenize_input();
+    void add_token(Token);
+    bool add_quote(int, int);
+    char enquote() const;
+    void add_string_buf();
+
+    const char* m_input;
+    std::string m_string_buf;
+    int m_quotes[4];
+    bool m_gobble, m_force_string;
+    std::vector<Token> m_tokens;
+};
+
 std::ostream& operator<<(std::ostream&, const Token&);
 std::ostream& operator<<(std::ostream&, const TokenType&);
-#endif
 }

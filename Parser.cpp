@@ -43,7 +43,7 @@ Expression* parse$executable(
     auto expr = new Expression(**cur);
     const Token*next = nullptr;
 
-    while ((next = next$pk(tokens, *cur)) != nullptr && next->type == TokenType::STRING) {
+    while ((next = next$pk(tokens, *cur)) != nullptr && next->type == String) {
         expr->children.push_back(new Expression(*next));
         (*cur)++;
     }
@@ -58,7 +58,7 @@ Expression* parse$background(
 ) {
     Expression*expr = nullptr;
 
-    if (asts.size() && asts.back()->token.type == TokenType::EXECUTABLE) {
+    if (asts.size() && asts.back()->token.type == Executable) {
         expr = new Expression(**cur);
 
         expr->children.push_back(asts.back());
@@ -76,10 +76,10 @@ Expression* parse$pipe(
 ) {
     Expression*expr = nullptr;
 
-    if (asts.size() && asts.back()->token.type == TokenType::EXECUTABLE) {
+    if (asts.size() && asts.back()->token.type == Executable) {
         auto*next = next$pk(tokens, (*cur)++);
 
-        if (next == nullptr || next->type != TokenType::EXECUTABLE) {
+        if (next == nullptr || next->type != Executable) {
             // We do not currently support a continuation prompt
             PARSE_ERR(Syntax error at unexpected token '|'.);
 
@@ -107,13 +107,13 @@ std::vector<Expression*> input$parse(std::vector<Token>&tokens) {
         Expression*expr = nullptr;
 
         switch (cur->type) {
-            case EXECUTABLE:
+            case Executable:
                 ADD_NOT_EMPTY_EARLY_RETURN(parse$executable(tokens, &cur))
                 continue;
-            case PIPE:
+            case RedirectPipe:
                 ADD_NOT_EMPTY_EARLY_RETURN(parse$pipe(tokens, asts, &cur))
                 continue;
-            case BACKGROUND:
+            case Background:
                 ADD_NOT_EMPTY_EARLY_RETURN(parse$background(tokens, asts, &cur))
                 continue;
         }

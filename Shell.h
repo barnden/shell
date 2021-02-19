@@ -5,16 +5,16 @@
 #include "Parser.h"
 
 namespace BShell {
-struct Process {
-    pid_t pid;
-    std::string name;
-    Pipe pipe;
-};
-
 struct Pipe {
     int stdin[2],
          stdout[2],
          stderr[2];
+};
+
+struct Process {
+    pid_t pid;
+    std::string name;
+    Pipe pipe;
 };
 
 extern std::vector<Process> processes;

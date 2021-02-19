@@ -99,7 +99,7 @@ std::string get$pname(pid_t pid) {
 std::string get$pname(Expression*expr) {
     auto pname = std::string {};
 
-    if (expr->token.type != EXECUTABLE)
+    if (expr->token.type != Executable)
         return pname;
 
     pname = expr->token.content;
@@ -218,9 +218,9 @@ void handle$pipe(Expression*expr) { }
 
 void handle$ast(Expression* ast) {
     switch (ast->token.type) {
-        case EXECUTABLE:
+        case Executable:
             return handle$executable(ast);
-        case BACKGROUND:
+        case Background:
             return handle$background(ast);
         default:
             std::cerr << "Unknown token type passed to handle$ast\n";

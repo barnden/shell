@@ -8,148 +8,166 @@
 #include "Shell.h"
 #include "Tokenizer.h"
 
-namespace BShell {
-#ifdef DEBUG_TOKENIZER
 const char* TokenNames[] = {
     "NULL", "STRING", "EQUAL", "EXECUTABLE", "BACKGROUND", "SEQUENTIAL",
     "SEQUENTIAL_CON", "PIPE", "REDIRECT_OUT", "REDIRECT_IN", "KEYWORD"
 };
 
-std::ostream& operator<<(std::ostream&os, const TokenType&type) {
-    return (os << TokenNames[static_cast<uint8_t>(type)]);
-}
-
-std::ostream& operator<<(std::ostream&os, const Token&token) {
-    return (os << "" << token.type << "\t\"" << token.content << '"');
-}
-#endif
-
-std::unordered_set<std::string> KEYWORDS = {
+namespace BShell {
+std::unordered_set<std::string> g_keywords = {
     "export", "cd", "jobs"
 };
 
-std::vector<Token> input$tokenize(const char*inp) {
-    // Nothing to parse if empty string.
-    if (!strlen(inp)) return std::vector<Token> {};
+Tokenizer::Tokenizer(const char*input) :
+    m_input(input),
+    m_string_buf(),
+    m_quotes(),
+    m_gobble(),
+    m_force_string()
+{
+    tokenize_input();
+}
 
-    auto str = std::string(inp), str_buf = std::string {};
-    auto gobble = false, force_string = false;
-    auto tokens = std::vector<Token> {};
+std::vector<Token> Tokenizer::tokens() const {
+    return m_tokens;
+}
 
-    int quotes[3] = { 0, 0, 0 }; // count for: single, double, backticks
+void Tokenizer::add_token(Token token) {
+    m_tokens.push_back(token);
+    m_string_buf = "";
+}
 
-    // TODO: Maybe move lambda functions outside of input$tokenize(const char*)
-    auto add_token = [&tokens, &str_buf](Token token) -> void {
-        tokens.push_back(token);
-        str_buf = "";
-    };
+bool Tokenizer::add_quote(int index, int mask) {
+    m_quotes[index] += !(enquote() & mask);
 
-    auto enquote = [&quotes]() -> int {
-        // Usage:
-        // if enquote != 0 then we know we are in some type of quotation mark
-        // using bitmasks we can we can determine which type of quotes we are in, i.e.
-        //    SINGLE: 0b110 = 6
-        //    DOUBLE: 0b101 = 5
-        // BACKTICKS: 0b011 = 3
-        return quotes[2] % 2 << 2 |
-               quotes[1] % 2 << 1 |
-               quotes[0] % 2;
-        };
+    if (m_quotes[index] && enquote() & mask) {
+        add_token(Token {
+            index <= 1 ? String : Eval,
+            m_string_buf.substr(1)
+        });
 
-    for (const auto&c : str) {
-        if (gobble) {
-            gobble = false;
-            continue;
+        return true;
+    }
+
+    return false;
+}
+
+char Tokenizer::enquote() const {
+    auto status = char {};
+
+    // If enquote != 0 then we are in some type of quotation mark
+    // we can determine which one by using a bitmask:
+    // SINGLE: 0xE
+    // DOUBLE: 0xD
+    //  GRAVE: 0xB
+    //   EVAL: 0x7
+
+    [&]<std::size_t ...I>(std::index_sequence<I...>) {
+        ((status = m_quotes[I] % 2 << I), ...);
+    }(std::make_index_sequence<4>{});
+
+    return status;
+}
+
+void Tokenizer::add_string_buf() {
+    if (!m_string_buf.size()) return;
+
+    auto type = TokenType::String;
+
+    if (g_keywords.contains(m_string_buf))
+        type = TokenType::Key;
+    else if (!m_force_string) {
+        auto path = get$executable_path(m_string_buf);
+
+        if (path.size()) {
+            type = TokenType::Executable;
+            m_force_string = true;
         }
     }
 
-    auto add_quote = [&add_token, &enquote, &quotes, &str_buf](int index, int mask) -> bool {
-        auto ret = false;
-        quotes[index] += !(enquote() & mask);
+    add_token(Token { type, m_string_buf });
+}
 
-        if (ret = quotes[index] && !(quotes[index] % 2))
-            add_token(Token { TokenType::STRING, str_buf.substr(1) } );
+void Tokenizer::tokenize_input() {
+    // Nothing to parse if empty string.
+    if (!strlen(m_input)) return;
 
-        return ret;
-    };
+    auto input = std::string(m_input);
 
-    auto handle$str_buf = [&str_buf, &force_string, &add_token]() -> void {
-        if (!str_buf.size()) return;
-
-        auto type = TokenType::STRING;
-
-        if (KEYWORDS.contains(str_buf))
-            type = TokenType::KEY;
-        else if (!force_string) {
-            auto path = get$executable_path(str_buf);
-
-            if (path.size()) {
-                type = TokenType::EXECUTABLE;
-                force_string = true;
-            }
-        }
-
-        add_token(Token { type, str_buf });
-    };
-
-    for (const auto&c : str) {
-        if (gobble) {
-            gobble = false;
+    // Iterate through each character in the input
+    // We use a one character look ahead to match any multi-character operators
+    for (const auto&c : input) {
+        if (m_gobble) {
+            m_gobble = false;
             continue;
         }
 
-        char*next = nullptr;
-        auto last = !(&*str.end() - &c - 1);
-
-        if (!last)
-            next = const_cast<char*>(&c + 1);
+        auto last = !(&*input.end() - &c - 1);
+        char*next = !last ? const_cast<char*>(&c + 1) : nullptr;
 
         switch (c) {
             case ' ':
                 if (enquote())
                     break;
 
-                handle$str_buf();
+                add_string_buf();
 
                 continue;
-            case '\'': if (add_quote(0, 6)) continue;
-            break;
-            case '"': if (add_quote(1, 5)) continue;
-            break;
-            case '`': if (add_quote(2, 3)) continue;
-            break;
+            case '\'':
+                if (add_quote(0, 0xE))
+                    continue;
+                break;
+            case '"':
+                if (add_quote(1, 0xD))
+                    continue;
+                break;
+            case '`':
+                if (add_quote(2, 0xB))
+                    continue;
+                break;
             case '$':
-                // if (next && *next == '(');
+                if (next && *next == '(') {
+                    m_gobble = true;
+
+                    if (add_quote(3, 0x7))
+                        continue;
+                }
+                break;
+            case ')':
+                if (enquote() & 0x7)
+                    if (add_quote(3, 0x7))
+                        continue;
                 break;
             case '>': case '<': case '|':
             case '=': case ';': case '&': {
                 if (enquote()) break;
 
                 auto type = TokenType {};
-                auto ff_string = false, pass = false;
+                auto override_string = false,
+                     pass = false;
 
                 switch (c) {
-                    case '>': type = REDIRECT_OUT; break;
-                    case '<': type = REDIRECT_IN; break;
-                    case '|': type = PIPE; break;
+                    case '>': type = RedirectOut; break;
+                    case '<': type = RedirectIn; break;
+                    case '|': type = RedirectPipe; break;
                     case '=':
-                        if (!force_string) {
-                            type = EQUAL;
-                            ff_string = true;
+                        if (!m_force_string) {
+                            type = Equal;
+                            override_string = true;
                         } else pass = true;
                     break;
-                    case ';': type = SEQUENTIAL; break;
+                    case ';': type = Sequential; break;
                     case '&':
                         if (next && *next == '&') {
-                            type = TokenType::SEQUENTIAL_CON;
-                            gobble = true;
-                        } else type = TokenType::BACKGROUND;
+                            m_gobble = true;
+                            type = SequentialIf;
+                        } else type = Background;
                     break;
                 }
 
                 if (!pass) {
-                    handle$str_buf();
-                    force_string = ff_string;
+                    add_string_buf();
+                    m_force_string = override_string;
 
                     add_token(Token { type, "" });
                     continue;
@@ -157,12 +175,18 @@ std::vector<Token> input$tokenize(const char*inp) {
             }
         }
 
-        str_buf += c;
+        m_string_buf += c;
 
         if (last)
-            handle$str_buf();
+            add_string_buf();
     }
+}
 
-    return tokens;
+std::ostream& operator<<(std::ostream&os, const TokenType&type) {
+    return (os << TokenNames[static_cast<uint8_t>(type)]);
+}
+
+std::ostream& operator<<(std::ostream&os, const Token&token) {
+    return (os << "" << token.type << "\t\"" << token.content << '"');
 }
 }

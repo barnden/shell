@@ -1,12 +1,13 @@
 #include <iostream>
+// #include <format>
+
+#include <readline/readline.h>
+#include <readline/history.h>
 #include <signal.h>
+#include <stdio.h>
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <unistd.h>
-
-#include <stdio.h>
-#include <readline/readline.h>
-#include <readline/history.h>
 
 #include "Terminal.h"
 #include "Shell.h"
@@ -49,16 +50,26 @@ int main(int argc, int*argv[]) {
         for (auto&proc : BShell::processes) {
             if (waitpid(proc.pid, NULL, WNOHANG) == 0) continue;
 
+            #if 0
+            // Turns out that std::format is not implemented by gcc 10 as of time of writing
+            std::cout
+            << std::format(
+                "[{}] {:12} {}\n",
+                &proc - &*BShell::processes.begin() + 1, "Done", proc.name
+            );
+            #else
             std::cout
             << '['
             << (&proc - &*BShell::processes.begin() + 1)
             << "] Done "
             << proc.name
             << '\n';
+            #endif
         }
 
-        BShell::edproc;
-        auto tokens = BShell::input$tokenize(const_cast<const char*>(input));
+        BShell::edproc();
+
+        auto tokens = BShell::Tokenizer(const_cast<const char*>(input)).tokens();
         auto asts = BShell::input$parse(tokens);
 
         for (auto*ast : asts) {
@@ -76,7 +87,10 @@ int main(int argc, int*argv[]) {
     free(hstate);
     free(hlist);
 
-    // Kill all children processes still in the vector
+    // Terminate all children using SIGTERM
+    // TODO: Should we hang parent to ensure children are dead, or even SIGKILL children?
+    // Currently we use WNOHANG to see if child is alive, inside BShell::edproc()
+    // if waitpid returns non-zero child is alive and we attempt to kill it again
     while (BShell::processes.size()) {
         BShell::edproc();
 
