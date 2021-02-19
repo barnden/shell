@@ -46,13 +46,25 @@ int main(int argc, int*argv[]) {
 
         add_history(input);
 
+        for (auto&proc : BShell::processes) {
+            if (waitpid(proc.pid, NULL, WNOHANG) == 0) continue;
+
+            std::cout
+            << '['
+            << (&proc - &*BShell::processes.begin() + 1)
+            << "] Done "
+            << proc.name
+            << '\n';
+        }
+
+        BShell::edproc;
         auto tokens = BShell::input$tokenize(const_cast<const char*>(input));
         auto asts = BShell::input$parse(tokens);
 
-        std::cout << "AST count " << asts.size() << '\n';
-
-        for (auto*ast : asts)
+        for (auto*ast : asts) {
+            BShell::handle$ast(ast);
             BShell::ast$delete_children(ast);
+        }
 
         free(input);
     }
@@ -63,6 +75,14 @@ int main(int argc, int*argv[]) {
     // session's commands a la bash.
     free(hstate);
     free(hlist);
+
+    // Kill all children processes still in the vector
+    while (BShell::processes.size()) {
+        BShell::edproc();
+
+        for (auto&proc : BShell::processes)
+            kill(proc.pid, SIGTERM);
+    }
 
     std::cout << "brandon shell exited\n";
 

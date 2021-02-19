@@ -8,6 +8,14 @@
 #include "Terminal.h"
 
 namespace BShell {
+void rl$reset() {
+    rl_crlf();
+    rl_reset_line_state();
+    rl_replace_line("", 1);
+    rl_on_new_line();
+    rl_redisplay();
+}
+
 void handler$posix_sig(int) {
     // Main objective of this handler is to stop the shell process
     // from exiting upon SIGINT/CTRL+C.
@@ -30,10 +38,6 @@ void handler$readline_sig(void) {
     // that caused this handler function to run. From the readline
     // docs it says that rl_hook_func_t takes no parameters.
 
-    rl_crlf();
-    rl_reset_line_state();
-    rl_replace_line("", 1);
-    rl_on_new_line();
-    rl_redisplay();
+    rl$reset();
 }
 }

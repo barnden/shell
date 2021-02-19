@@ -25,7 +25,7 @@ std::ostream& operator<<(std::ostream&os, const Token&token) {
 #endif
 
 std::unordered_set<std::string> KEYWORDS = {
-    "export", "cd"
+    "export", "cd", "jobs"
 };
 
 std::vector<Token> input$tokenize(const char*inp) {
@@ -106,9 +106,12 @@ std::vector<Token> input$tokenize(const char*inp) {
 
         switch (c) {
             case ' ':
-                if (enquote()) break;
+                if (enquote())
+                    break;
+
                 handle$str_buf();
-            continue;
+
+                continue;
             case '\'': if (add_quote(0, 6)) continue;
             break;
             case '"': if (add_quote(1, 5)) continue;
@@ -117,7 +120,7 @@ std::vector<Token> input$tokenize(const char*inp) {
             break;
             case '$':
                 // if (next && *next == '(');
-            break;
+                break;
             case '>': case '<': case '|':
             case '=': case ';': case '&': {
                 if (enquote()) break;
@@ -137,12 +140,10 @@ std::vector<Token> input$tokenize(const char*inp) {
                     break;
                     case ';': type = SEQUENTIAL; break;
                     case '&':
-                        if (next && *next != '&')
-                            type = TokenType::BACKGROUND;
-                        else {
+                        if (next && *next == '&') {
                             type = TokenType::SEQUENTIAL_CON;
                             gobble = true;
-                        }
+                        } else type = TokenType::BACKGROUND;
                     break;
                 }
 
