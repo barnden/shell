@@ -34,15 +34,11 @@ Parser::Parser(std::vector<Token>&tokens) :
 
 std::vector<Expression*> Parser::asts() const { return m_asts; }
 
-void Parser::parse_executable() {
-    auto expr = new Expression(*m_cur);
-
+void Parser::add_strings(Expression* expr) {
     while ((m_next = peek()) != nullptr && m_next->type == String) {
         expr->children.push_back(new Expression(*m_next));
         m_cur++;
     }
-
-    m_asts.push_back(expr);
 }
 
 void Parser::parse_background() {
@@ -93,13 +89,17 @@ void Parser::parse() {
         }
 
         Expression*expr = nullptr;
-
         m_next = peek();
         m_prev = peek_back();
 
         switch (m_cur->type) {
-            case Executable:
-                parse_executable();
+            case Key:
+            case Executable: {
+                auto expr = new Expression(*m_cur);
+
+                add_strings(expr);
+                m_asts.push_back(expr);
+                }
                 continue;
             case RedirectPipe:
                 parse_pipe();

@@ -10,7 +10,7 @@
 
 const char* TokenNames[] = {
     "NULL", "STRING", "EQUAL", "EXECUTABLE", "BACKGROUND", "SEQUENTIAL",
-    "SEQUENTIAL_CON", "PIPE", "REDIRECT_OUT", "REDIRECT_IN", "KEYWORD"
+    "SEQUENTIAL_CON", "PIPE", "REDIRECT_OUT", "REDIRECT_IN", "KEYWORD", "EVAL"
 };
 
 namespace BShell {
@@ -40,11 +40,11 @@ void Tokenizer::add_token(Token token) {
 bool Tokenizer::add_quote(int index, int mask) {
     m_quotes[index] += !(enquote() & mask);
 
-    if (m_quotes[index] && enquote() & mask) {
-        add_token(Token {
-            index <= 1 ? String : Eval,
-            m_string_buf.substr(1)
-        });
+    if (m_quotes[index] & ~~mask)
+        add_string_buf();
+
+    if (m_quotes[index] && !(m_quotes[index] % 2)) {
+        add_token(Token { index <= 1 ? String : Eval, m_string_buf.substr(1) });
 
         return true;
     }
@@ -55,15 +55,8 @@ bool Tokenizer::add_quote(int index, int mask) {
 char Tokenizer::enquote() const {
     auto status = char {};
 
-    // If enquote != 0 then we are in some type of quotation mark
-    // we can determine which one by using a bitmask:
-    // SINGLE: 0xE
-    // DOUBLE: 0xD
-    //  GRAVE: 0xB
-    //   EVAL: 0x7
-
     [&]<std::size_t ...I>(std::index_sequence<I...>) {
-        ((status = m_quotes[I] % 2 << I), ...);
+        ((status |= m_quotes[I] % 2 << I), ...);
     }(std::make_index_sequence<4>{});
 
     return status;
@@ -74,9 +67,10 @@ void Tokenizer::add_string_buf() {
 
     auto type = TokenType::String;
 
-    if (g_keywords.contains(m_string_buf))
+    if (g_keywords.contains(m_string_buf)) {
         type = TokenType::Key;
-    else if (!m_force_string) {
+        m_force_string = true;
+    } else if (!m_force_string) {
         auto path = get$executable_path(m_string_buf);
 
         if (path.size()) {
@@ -134,13 +128,14 @@ void Tokenizer::tokenize_input() {
                 }
                 break;
             case ')':
-                if (enquote() & 0x7)
+                if (enquote() & 8)
                     if (add_quote(3, 0x7))
                         continue;
                 break;
             case '>': case '<': case '|':
             case '=': case ';': case '&': {
-                if (enquote()) break;
+                if (enquote())
+                    break;
 
                 auto type = TokenType {};
                 auto override_string = false,

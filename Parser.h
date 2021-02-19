@@ -19,7 +19,7 @@ public:
     std::vector<Expression*> asts() const;
 private:
     void parse();
-    void parse_executable();
+    void add_strings(Expression*);
     void parse_pipe();
     void parse_background();
     Token* peek();

@@ -36,9 +36,10 @@ void edproc();
 
 void handle$ast(Expression*);
 
-extern std::vector<Process> processes;
+extern std::string g_prev_wd;
+extern std::vector<Process> g_processes;
 
 // TODO: Implement $? and $! to get the exit code of processes.
-extern int fg_exit; // $?
-extern int bg_exit; // $!
+extern int g_exit_fg; // $?
+extern int g_exit_bg; // $!
 }

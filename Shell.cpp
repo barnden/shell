@@ -13,9 +13,10 @@
 #include "Terminal.h"
 
 namespace BShell {
-std::vector<Process> processes;
-int fg_exit = 0;
-int bg_exit = 0;
+std::string g_prev_wd = get$cwd();
+std::vector<Process> g_processes;
+int g_exit_fg = 0;
+int g_exit_bg = 0;
 
 std::string get$cwd() {
     // From getcwd(3) it says get_current_dir_name() will malloc a
@@ -128,26 +129,34 @@ std::string get$executable_path(std::string cmd) {
     return path;
 }
 
-void handle$cd(const char*argc) {
-    if (!strlen(argc)) {
-        if (chdir(get$home().c_str()) == -1)
-            std::cerr << "Failed to change directory\n";
-    } else if (*argc == '~') {
+void handle$cd(std::string dir) {
+    auto* dirc = dir.c_str();
+    auto cwd = get$cwd();
+    auto stat = 0;
+
+    if (!dir.size())
+        stat = chdir(get$home().c_str());
+    else if (dir[0] == '~') {
         auto home = get$home();
-        auto*path = new char [strlen(argc) + home.size()];
+        auto* path = new char [strlen(dirc) + home.size()];
 
         strcpy(path, home.c_str());
-        strcpy(path + home.size(), argc + 1);
+        strcpy(path + home.size(), dirc + 1);
 
-        if (chdir(path) == -1)
-            std::cerr << "Failed to change directory\n";
+        stat = chdir(path);
 
         delete[] path;
-    } else if (chdir(argc) == -1)
+    } else if (dir == "-") stat = chdir(g_prev_wd.c_str());
+    else stat = chdir(dirc);
+
+    // Don't change previous directory on error.
+    if (stat < 0)
         std::cerr << "Failed to change directory\n";
+    else
+        g_prev_wd = cwd;
 }
 
-Process execute(Expression*expr, auto&&child_hook) {
+Process execute(Expression*expr, auto&& child_hook) {
     auto pid = fork();
 
     if (!pid) {
@@ -194,31 +203,50 @@ Process execute$pipe_out(Expression*expr) {
     return proc;
 }
 
-void handle$keyword(Expression*expr) { }
+void handle$keyword(Expression*expr) {
+    auto kw = expr->token.content;
+    auto index = std::distance(g_keywords.find(kw), g_keywords.end());
+    auto args = expr->children.size() ? expr->children[0]->token.content : std::string {};
+
+    // TODO: Maybe use an enum for more readability
+    switch (index) {
+        case 1: // export
+            break;
+        case 2: // cd
+            handle$cd(args);
+            break;
+        case 3: // jobs
+            break;
+    }
+}
 
 void handle$executable(Expression*expr) {
     auto proc = execute(expr);
 
-    waitpid(proc.pid, &fg_exit, 0);
+    waitpid(proc.pid, &g_exit_fg, 0);
 }
 
 void handle$background(Expression*expr) {
     auto proc = execute(expr->children[0]);
 
-    std::cout << '[' << processes.size() + 1 << "] " << proc.pid << '\n';
+    std::cout << '[' << g_processes.size() + 1 << "] " << proc.pid << '\n';
 
-    waitpid(proc.pid, &bg_exit, WNOHANG);
-    processes.push_back(Process { proc.pid, proc.name });
+    waitpid(proc.pid, &g_exit_bg, WNOHANG);
+    g_processes.push_back(Process { proc.pid, proc.name });
 }
 
 void handle$pipe(Expression*expr) { }
 
 void handle$ast(Expression* ast) {
     switch (ast->token.type) {
+        case Key:
+            return handle$keyword(ast);
         case Executable:
             return handle$executable(ast);
         case Background:
             return handle$background(ast);
+        case RedirectPipe:
+            return handle$pipe(ast);
         default:
             std::cerr << "Unknown token type passed to handle$ast\n";
             // exit(1);
@@ -226,11 +254,11 @@ void handle$ast(Expression* ast) {
 }
 
 void edproc() {
-    processes.erase(
+    g_processes.erase(
         std::remove_if(
-            processes.begin(), processes.end(),
-            [=](const Process&proc) -> bool { return waitpid(proc.pid, NULL, WNOHANG) != 0; }
-        ), processes.end()
+            g_processes.begin(), g_processes.end(),
+            [=](const Process&proc) -> bool { return waitpid(proc.pid, &g_exit_bg, WNOHANG) != 0; }
+        ), g_processes.end()
     );
 }
 }
