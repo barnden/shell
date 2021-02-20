@@ -144,8 +144,14 @@ void Tokenizer::tokenize_input() {
                      pass = false;
 
                 switch (c) {
-                    case '>': type = RedirectOut; break;
-                    case '<': type = RedirectIn; break;
+                    case '>':
+                        type = RedirectOut;
+                        override_string = true;
+                        break;
+                    case '<':
+                        type = RedirectIn;
+                        override_string = true;
+                        break;
                     case '|': type = RedirectPipe; break;
                     case '=':
                         if (!m_force_string) {
