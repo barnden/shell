@@ -6,9 +6,7 @@
 
 namespace BShell {
 struct Pipe {
-    int stdin[2],
-         stdout[2],
-         stderr[2];
+    int fd[2];
 };
 
 struct Process {
@@ -32,7 +30,7 @@ std::string get$pname(Expression*expr);
 std::string get$executable_path(std::string);
 
 void set$cwd(std::string);
-void edproc();
+void erase_dead_children();
 
 void handle$ast(Expression*);
 
