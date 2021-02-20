@@ -1,4 +1,5 @@
-CXX_FLAGS=-g -w -fsanitize=undefined,address -std=c++20
+# Run make with -j flag to parallelize compilation
+CXX_FLAGS=-g -w -fsanitize=undefined,address -std=c++20 -pipe
 
 all: Tokenizer.o Parser.o PromptString.o Shell.o Terminal.o main.o
 	g++ $(CXX_FLAGS) -o shell Tokenizer.o Parser.o Terminal.o Shell.o PromptString.o main.o -lreadline
