@@ -6,16 +6,6 @@
 #include "Parser.h"
 
 #define PARSER_ERR(msg) { std::cerr << msg << '\n'; m_err = true; }
-#define EMPTY_AST\
-    [&]() -> std::vector<Expression*> {\
-        for (auto&ast : asts) ast$delete_children(ast);\
-        return std::vector<Expression*> {};\
-    }();
-#define ADD_NOT_EMPTY_EARLY_RETURN(func){\
-    auto pexpr = func;\
-    if (!pexpr) return EMPTY_AST;\
-    asts.push_back(pexpr);\
-    }
 
 namespace BShell {
 Expression::Expression() {}
@@ -53,7 +43,7 @@ void Parser::parse_background() {
     } else PARSER_ERR("Syntax error near unexpected token '&'.");
 }
 
-void Parser::parse_next() {
+void Parser::parse_current() {
     switch (m_cur->type) {
         case Key:
         case Executable: {
@@ -62,6 +52,10 @@ void Parser::parse_next() {
             add_strings(expr);
             m_asts.push_back(expr);
             }
+            break;
+        case RedirectIn:
+        case RedirectOut:
+            parse_redirection();
             break;
         case RedirectPipe:
             parse_pipe();
@@ -72,15 +66,40 @@ void Parser::parse_next() {
     }
 }
 
-void Parser::parse_pipe() {
-    Expression* expr = nullptr;
+void Parser::parse_redirection() {
+    // Redirections should always be the child of an executable.
+    if (m_asts.size() && (
+        m_asts.back()->token.type == RedirectPipe ||
+        m_asts.back()->token.type == Executable
+    )) {
+        if (m_next == nullptr || (m_next->type != Eval && m_next->type != String)) {
+            // Should probably make a lookup for the token's corresponding char
+            PARSER_ERR("Syntax error at unexpected redirection token.");
+            return;
+        }
 
+        auto expr = new Expression(*m_cur);
+        Expression* exec = nullptr;
+
+        if (m_asts.back()->token.type == RedirectPipe)
+            exec = m_asts.back()->children.back();
+        else
+            exec = m_asts.back();
+
+        expr->children.push_back(new Expression(*++m_cur));
+        exec->children.push_back(expr);
+    } else PARSER_ERR("Syntax error near unexpected redirection token.");
+}
+
+void Parser::parse_pipe() {
     if (m_asts.size() && m_asts.back()->token.type != String) {
         if (m_next == nullptr || (m_next->type != Executable && m_next->type != Key)) {
             // We do not currently support a continuation prompt
             PARSER_ERR("Syntax error at unexpected token '|'.");
             return;
         }
+
+        Expression* expr = nullptr;
 
         // Instead of having a multi-level tree for all the pipes
         // flatten the tree into one layer, where children from
@@ -96,7 +115,7 @@ void Parser::parse_pipe() {
         m_asts.pop_back();
 
         m_cur++;
-        parse_next();
+        parse_current();
 
         expr->children.push_back(m_asts.back());
         m_asts.pop_back();
@@ -121,7 +140,7 @@ void Parser::parse() {
 
         m_next = peek();
 
-        parse_next();
+        parse_current();
 
         m_cur++;
     }

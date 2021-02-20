@@ -22,14 +22,15 @@ private:
     void add_strings(Expression*);
     void parse_background();
     void parse_pipe();
-    void parse_next();
+    void parse_redirection();
+    void parse_current();
 
     Token* peek();
 
     bool m_err;
     Token *m_cur, *m_next;
     std::vector<Expression*> m_asts;
-    std::vector<Token>&m_tokens;
+    std::vector<Token>& m_tokens;
 };
 
 std::vector<Expression*> input$parse(std::vector<Token>&);
