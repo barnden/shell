@@ -13,10 +13,26 @@
 #include "Terminal.h"
 
 namespace BShell {
-std::string g_prev_wd = get$cwd();
+std::string g_prev_wd = "";
 std::vector<Process> g_processes;
 int g_exit_fg = 0;
 int g_exit_bg = 0;
+
+bool file$access(std::string path, int tests) {
+    return access(path.c_str(), tests) != -1;
+}
+
+bool file$is_executable(std::string path) {
+    return file$access(path, X_OK);
+}
+
+bool file$is_readable(std::string path) {
+    return file$access(path, R_OK);
+}
+
+bool file$is_writable(std::string path) {
+    return file$access(path, W_OK);
+}
 
 std::string get$cwd() {
     // From getcwd(3) it says get_current_dir_name() will malloc a
@@ -94,7 +110,7 @@ std::string get$pname(pid_t pid) {
     return ss.str();
 }
 
-std::string get$pname(Expression*expr) {
+std::string get$pname(Expression* expr) {
     auto pname = std::string {};
 
     if (expr->token.type != Executable)
@@ -120,13 +136,17 @@ std::string get$executable_path(std::string cmd) {
     for (; j != std::string::npos; j = env_path.find(':', i = j + 1)) {
         auto tmp = env_path.substr(i, j - i) + "/" + cmd;
 
-        if (access(tmp.c_str(), X_OK) != -1) {
+        if (file$is_executable(tmp)) {
             path = tmp;
             break;
         }
     }
 
     return path;
+}
+
+int get$file(std::string path) {
+
 }
 
 void handle$cd(std::string dir) {
@@ -146,8 +166,12 @@ void handle$cd(std::string dir) {
         stat = chdir(path);
 
         delete[] path;
-    } else if (dir == "-") stat = chdir(g_prev_wd.c_str());
-    else stat = chdir(dirc);
+    } else if (dir == "-") {
+        if (g_prev_wd.size()) {
+            stat = chdir(g_prev_wd.c_str());
+            std::cout << g_prev_wd << '\n';
+        } else std::cerr << "g_prev_wd not set\n";
+    } else stat = chdir(dirc);
 
     // Don't change previous directory on error.
     if (stat < 0)
@@ -159,51 +183,40 @@ void handle$cd(std::string dir) {
 Process execute(Expression*expr, auto&& child_hook) {
     auto pid = fork();
 
-    if (!pid) {
+    if (pid < 0) {
+        std::cerr << "Shell execute function failed to fork.\n";
+
+        exit(1);
+    } else if (!pid) {
         auto cmd = expr->token.content.c_str();
 
-        if (expr->children.size()) {
-            auto children = expr->children;
-            auto argc = children.size() + 2;
-            char**argv = new char* [argc];
-            argv[0] = const_cast<char*>(cmd);
+        auto children = expr->children;
+        auto argc = children.size() + 2;
+        auto** argv = new char* [argc];
 
-            for (auto i = 0; i < children.size(); i++)
-                argv[i + 1] = const_cast<char*>(children[i]->token.content.c_str());
+        argv[0] = const_cast<char*>(cmd);
 
-            argv[argc - 1] = NULL;
+        for (auto i = 0; i < children.size(); i++)
+            argv[i + 1] = const_cast<char*>(children[i]->token.content.c_str());
 
-            child_hook();
+        argv[argc - 1] = NULL;
 
-            execvp(argv[0], argv);
-        }
+        child_hook();
 
-        execlp(cmd, cmd, NULL);
+        execvp(argv[0], argv);
+
+        std::cerr << "Failed to execvp()\n";
+        exit(1);
     }
 
     return Process { pid, get$pname(expr) };
 }
 
-Process execute(Expression*expr) { return execute(expr, [=]{}); }
-
-Process execute$pipe_out(Expression*expr) {
-    auto pproc = Pipe {};
-
-    pipe(pproc.stdout);
-
-    auto proc = execute(expr, [=]() -> void {
-        dup2(pproc.stdout[1], 1);
-        close(pproc.stdout[0]);
-    });
-
-    proc.pipe = pproc;
-
-    close(pproc.stdout[1]);
-
-    return proc;
+Process execute(Expression*expr) {
+    return execute(expr, [=]{});
 }
 
-void handle$keyword(Expression*expr) {
+void handle$keyword(Expression* expr) {
     auto kw = expr->token.content;
     auto index = std::distance(g_keywords.find(kw), g_keywords.end());
     auto args = expr->children.size() ? expr->children[0]->token.content : std::string {};
@@ -220,13 +233,13 @@ void handle$keyword(Expression*expr) {
     }
 }
 
-void handle$executable(Expression*expr) {
+void handle$executable(Expression* expr) {
     auto proc = execute(expr);
 
     waitpid(proc.pid, &g_exit_fg, 0);
 }
 
-void handle$background(Expression*expr) {
+void handle$background(Expression* expr) {
     auto proc = execute(expr->children[0]);
 
     std::cout << '[' << g_processes.size() + 1 << "] " << proc.pid << '\n';
@@ -235,7 +248,78 @@ void handle$background(Expression*expr) {
     g_processes.push_back(Process { proc.pid, proc.name });
 }
 
-void handle$pipe(Expression*expr) { }
+void handle$pipe(Expression*expr) {
+    auto last_io = Pipe {};
+
+    for (auto& child : expr->children) {
+        // TODO: Maybe figure out something other than this callback structure.
+        auto proc = Process {};
+        auto proc_io = Pipe {};
+
+        if (pipe(proc_io.fd) < 0) {
+            std::cerr << "Unexpected error when opening pipe, proc_io.\n";
+
+            exit(1);
+        }
+
+        if (child == expr->children.front()) {
+            // The first process in the chain never reads from proc_io
+            proc = execute(child,
+                [=]() -> void {
+                    dup2(proc_io.fd[1], STDOUT_FILENO);
+
+                    close(proc_io.fd[0]);
+                    close(proc_io.fd[1]);
+                }
+            );
+
+            last_io = proc_io;
+        } else if (child == expr->children.back()) {
+            // The last process in the chain never writes to proc_io
+            proc = execute(child,
+                [=]() -> void {
+                    dup2(last_io.fd[0], STDIN_FILENO);
+
+                    close(last_io.fd[0]);
+                    close(last_io.fd[1]);
+
+                    close(proc_io.fd[0]);
+                    close(proc_io.fd[1]);
+                }
+            );
+
+            close(last_io.fd[0]);
+            close(last_io.fd[1]);
+
+            close(proc_io.fd[0]);
+            close(proc_io.fd[1]);
+        } else {
+            proc = execute(child,
+                [=]() -> void {
+                    dup2(last_io.fd[0], STDIN_FILENO);
+                    dup2(proc_io.fd[1], STDOUT_FILENO);
+
+                    close(last_io.fd[0]);
+                    close(last_io.fd[1]);
+
+                    close(proc_io.fd[0]);
+                    close(proc_io.fd[1]);
+                }
+            );
+
+            close(last_io.fd[0]);
+            close(last_io.fd[1]);
+
+            last_io = proc_io;
+        }
+
+        if (waitpid(-1, &g_exit_fg, 0) < 0) {
+            std::cerr << "waitpid error\n";
+
+            exit(1);
+        }
+    }
+}
 
 void handle$ast(Expression* ast) {
     switch (ast->token.type) {
@@ -253,7 +337,7 @@ void handle$ast(Expression* ast) {
     }
 }
 
-void edproc() {
+void erase_dead_children() {
     g_processes.erase(
         std::remove_if(
             g_processes.begin(), g_processes.end(),
