@@ -14,7 +14,8 @@
 #include "Parser.h"
 #include "PromptString.h"
 
-#define DEBUG_AST
+#define DEBUG_AST true
+#define DEBUG_TOKEN true
 
 void print$bgproc() {
     for (auto&proc : BShell::g_processes) {
@@ -78,8 +79,15 @@ int main(int argc, int*argv[]) {
             auto tokens = BShell::Tokenizer(const_cast<const char*>(input)).tokens();
             auto asts = BShell::Parser(tokens).asts();
 
+            #if DEBUG_TOKEN
+            std::cout << "--{Token Begin}--\n";
+            for (auto& t : tokens)
+                std::cout << t << '\n';
+            std::cout << "--{Token End}--\n";
+            #endif
+
             for (auto*ast : asts) {
-                #ifdef DEBUG_AST
+                #if DEBUG_AST
                 std::cout << "--{AST Begin}--\n";
                 BShell::ast$print(ast);
                 std::cout << "--{AST End}--\n";
