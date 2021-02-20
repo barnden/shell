@@ -20,8 +20,10 @@ public:
 private:
     void parse();
     void add_strings(Expression*);
-    void parse_pipe();
     void parse_background();
+    void parse_pipe();
+    void parse_next();
+
     Token* peek();
     Token* peek_back();
 
@@ -34,4 +36,5 @@ private:
 std::vector<Expression*> input$parse(std::vector<Token>&);
 
 void ast$delete_children(Expression*);
+void ast$print(Expression*);
 }

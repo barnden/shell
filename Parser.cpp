@@ -5,7 +5,7 @@
 #include "Tokenizer.h"
 #include "Parser.h"
 
-#define PARSER_ERR(msg) std::cerr << msg << '\n'; m_err = true;
+#define PARSER_ERR(msg) { std::cerr << msg << '\n'; m_err = true; }
 #define EMPTY_AST\
     [&]() -> std::vector<Expression*> {\
         for (auto&ast : asts) ast$delete_children(ast);\
@@ -54,22 +54,54 @@ void Parser::parse_background() {
     } else PARSER_ERR("Syntax error near unexpected token '&'.");
 }
 
+void Parser::parse_next() {
+    switch (m_cur->type) {
+        case Key:
+        case Executable: {
+            auto expr = new Expression(*m_cur);
+
+            add_strings(expr);
+            m_asts.push_back(expr);
+            }
+            break;
+        case RedirectPipe:
+            parse_pipe();
+            break;
+        case Background:
+            parse_background();
+            break;
+    }
+}
+
 void Parser::parse_pipe() {
     Expression* expr = nullptr;
 
     if (m_asts.size() && m_asts.back()->token.type != String) {
-        if (m_next == nullptr || m_next->type != Executable) {
+        if (m_next == nullptr || (m_next->type != Executable && m_next->type != Key)) {
             // We do not currently support a continuation prompt
             PARSER_ERR("Syntax error at unexpected token '|'.");
             return;
         }
 
-        expr = new Expression(*m_cur);
+        // Instead of having a multi-level tree for all the pipes
+        // flatten the tree into one layer, where children from
+        // left have higher precedence when executing.
 
-        expr->children.push_back(m_asts.back());
-        expr->children.push_back(new Expression(*m_next));
+        if (m_asts.back()->token.type == RedirectPipe) {
+            expr = m_asts.back();
+        } else {
+            expr = new Expression(*m_cur);
+            expr->children.push_back(m_asts.back());
+        }
 
         m_asts.pop_back();
+
+        m_cur++;
+        parse_next();
+
+        expr->children.push_back(m_asts.back());
+        m_asts.pop_back();
+
         m_asts.push_back(expr);
     } else PARSER_ERR("Syntax error near unexpected token '|'.");
 }
@@ -79,7 +111,7 @@ void Parser::parse() {
 
     m_cur = &*m_tokens.begin();
 
-    for (; m_cur < &*m_tokens.end(); m_cur++) {
+    while (m_cur < &*m_tokens.end()) {
         if (m_err) {
             for (auto& ast : m_asts)
                 ast$delete_children(ast);
@@ -88,26 +120,12 @@ void Parser::parse() {
             return;
         }
 
-        Expression*expr = nullptr;
         m_next = peek();
         m_prev = peek_back();
 
-        switch (m_cur->type) {
-            case Key:
-            case Executable: {
-                auto expr = new Expression(*m_cur);
+        parse_next();
 
-                add_strings(expr);
-                m_asts.push_back(expr);
-                }
-                continue;
-            case RedirectPipe:
-                parse_pipe();
-                continue;
-            case Background:
-                parse_background();
-                continue;
-        }
+        m_cur++;
     }
 }
 
@@ -119,11 +137,26 @@ Token* Parser::peek_back() {
     return &*m_tokens.begin() != m_cur - 1 ? m_cur - 1 : nullptr;
 }
 
-void ast$delete_children(Expression*expr){
+void ast$delete_children(Expression* expr){
     if (expr->children.size())
         for (auto*child : expr->children)
             ast$delete_children(child);
 
     delete expr;
+}
+
+void ast$print(Expression* expr, int depth) {
+    for (auto i = 0; i < depth; i++)
+        std::cout << "    ";
+
+    std::cout << expr->token << '\n';
+
+    if (expr->children.size())
+        for (auto i = 0; i < expr->children.size(); i++)
+            ast$print(expr->children[i], depth + 1);
+}
+
+void ast$print(Expression* expr) {
+    ast$print(expr, 0);
 }
 }
