@@ -14,6 +14,8 @@
 #include "Parser.h"
 #include "PromptString.h"
 
+#define DEBUG_AST
+
 void print$bgproc() {
     for (auto&proc : BShell::g_processes) {
         if (waitpid(proc.pid, &BShell::g_exit_bg, WNOHANG) == 0) continue;
@@ -68,7 +70,7 @@ int main(int argc, int*argv[]) {
         if (input == NULL) break;
 
         print$bgproc();
-        BShell::edproc();
+        BShell::erase_dead_children();
 
         if (strlen(input)) {
             add_history(input);
@@ -76,10 +78,14 @@ int main(int argc, int*argv[]) {
             auto tokens = BShell::Tokenizer(const_cast<const char*>(input)).tokens();
             auto asts = BShell::Parser(tokens).asts();
 
-            std::cout << asts.size() << '\n';
-
             for (auto*ast : asts) {
-                // BShell::handle$ast(ast);
+                #ifdef DEBUG_AST
+                std::cout << "--{AST Begin}--\n";
+                BShell::ast$print(ast);
+                std::cout << "--{AST End}--\n";
+                #endif
+
+                BShell::handle$ast(ast);
                 BShell::ast$delete_children(ast);
             }
         }
@@ -94,15 +100,23 @@ int main(int argc, int*argv[]) {
     free(hstate);
     free(hlist);
 
-    // Terminate all children using SIGTERM
-    // TODO: Should we hang parent to ensure children are dead, or even SIGKILL children?
-    // Currently we use WNOHANG to see if child is alive, inside BShell::edproc()
-    // if waitpid returns non-zero child is alive and we attempt to kill it again
     while (BShell::g_processes.size()) {
-        BShell::edproc();
+        // Terminate all children using SIGTERM
+        BShell::erase_dead_children();
 
         for (auto&proc : BShell::g_processes)
             kill(proc.pid, SIGTERM);
+    }
+
+    if (waitpid(-1, NULL, WNOHANG) == 0) {
+        // This is just a sanity check, this should never be executed assuming that we have
+        // successfully kept track of all backgrounded children and sent SIGTERM if they
+        // were still on going when the shell is closing.
+
+        std::cerr << "Zombie processes detected.\n";
+
+        // Not much information to give to user because BShell::g_processes should be empty
+        // if we manage to get here.
     }
 
     std::cout << "brandon shell exited\n";
