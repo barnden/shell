@@ -25,10 +25,9 @@ private:
     void parse_next();
 
     Token* peek();
-    Token* peek_back();
 
     bool m_err;
-    Token *m_cur, *m_prev, *m_next;
+    Token *m_cur, *m_next;
     std::vector<Expression*> m_asts;
     std::vector<Token>&m_tokens;
 };

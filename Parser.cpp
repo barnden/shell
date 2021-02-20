@@ -23,7 +23,6 @@ Expression::Expression(Token token) : token(token) {}
 
 Parser::Parser(std::vector<Token>&tokens) :
     m_tokens(tokens),
-    m_prev(),
     m_cur(),
     m_next(),
     m_asts(),
@@ -121,7 +120,6 @@ void Parser::parse() {
         }
 
         m_next = peek();
-        m_prev = peek_back();
 
         parse_next();
 
@@ -131,10 +129,6 @@ void Parser::parse() {
 
 Token* Parser::peek() {
     return  &*m_tokens.end() != m_cur + 1 ? m_cur + 1 : nullptr;
-}
-
-Token* Parser::peek_back() {
-    return &*m_tokens.begin() != m_cur - 1 ? m_cur - 1 : nullptr;
 }
 
 void ast$delete_children(Expression* expr){
