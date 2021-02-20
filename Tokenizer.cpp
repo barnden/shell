@@ -40,11 +40,13 @@ void Tokenizer::add_token(Token token) {
 bool Tokenizer::add_quote(int index, int mask) {
     m_quotes[index] += !(enquote() & mask);
 
-    if (m_quotes[index] & ~~mask)
+    if (enquote() & (0xF ^ mask))
         add_string_buf();
 
     if (m_quotes[index] && !(m_quotes[index] % 2)) {
-        add_token(Token { index <= 1 ? String : Eval, m_string_buf.substr(1) });
+        add_token(Token { index <= 1 ? String : Eval,
+            (m_string_buf.size() > 1) ? m_string_buf.substr(1) : m_string_buf
+        });
 
         return true;
     }
