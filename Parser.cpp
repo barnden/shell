@@ -24,7 +24,7 @@ Parser::Parser(std::vector<Token>&tokens) :
 std::vector<Expression*> Parser::asts() const { return m_asts; }
 
 void Parser::add_strings(Expression* expr) {
-    while ((m_next = peek()) != nullptr && m_next->type == String) {
+    while ((m_next = peek()) != nullptr && (m_next->type == String || m_next->type == Eval)) {
         expr->children.push_back(new Expression(*m_next));
         m_cur++;
     }
