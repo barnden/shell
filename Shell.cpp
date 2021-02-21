@@ -1,12 +1,14 @@
 #include <fstream>
 #include <iostream>
-#include <sstream>
 #include <string>
 #include <vector>
 
-#include <string.h>
-#include <sys/wait.h>
+#include <fcntl.h>
 #include <pwd.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "Shell.h"
@@ -103,11 +105,8 @@ std::string get$hostname() {
 
 std::string get$pname(pid_t pid) {
     auto proc = std::ifstream("/proc/" + std::to_string(pid) + "/cmdline");
-    auto ss = std::stringstream {};
 
-    ss << proc.rdbuf();
-
-    return ss.str();
+    return std::string { std::istreambuf_iterator { proc.rdbuf() }, {} };
 }
 
 std::string get$pname(Expression* expr) {
@@ -149,6 +148,10 @@ int get$file(std::string path) {
 
 }
 
+std::string get$eval(Token eval) {
+    return std::string {};
+}
+
 void handle$cd(std::string dir) {
     auto* dirc = dir.c_str();
     auto cwd = get$cwd();
@@ -183,39 +186,87 @@ void handle$cd(std::string dir) {
 template<typename T>
 Process execute(Expression* expr, T&& child_hook) {
     auto pid = fork();
-    auto proc_io = Pipe {};
+    auto children = expr->children;
+    auto cmd = expr->token.content.c_str();
+
+    Expression* redirect_in = nullptr;
+    Expression* redirect_out = nullptr;
+
+    std::vector<char*> argv = { const_cast<char*>(cmd) };
+
+    for (auto& child : children) {
+        switch (child->token.type) {
+            case String:
+                argv.push_back(const_cast<char*>(child->token.content.c_str()));
+                break;
+            case Eval:
+                argv.push_back(const_cast<char*>(get$eval(child->token).c_str()));
+                break;
+            case RedirectIn:
+                redirect_in = child->children[0];
+                break;
+            case RedirectOut:
+                redirect_out = child->children[0];
+                break;
+        }
+    }
 
     if (pid < 0) {
         std::cerr << "Shell execute function failed to fork.\n";
 
         exit(1);
     } else if (!pid) {
-        auto cmd = expr->token.content.c_str();
+        argv.push_back(NULL);
 
-        auto children = expr->children;
-        auto argc = children.size() + 2;
-        auto** argv = new char* [argc];
+        if (redirect_in) {
+            auto filename = redirect_in->token.type == String ?
+                redirect_in->token.content : get$eval(redirect_in->token);
+            auto file = open(filename.c_str(), O_RDONLY);
 
-        argv[0] = const_cast<char*>(cmd);
+            if (file < 0) {
+                std::cerr << filename << ": No such file or directory\n";
+                exit(1);
+            }
 
-        for (auto i = 0; i < children.size(); i++)
-            argv[i + 1] = const_cast<char*>(children[i]->token.content.c_str());
+            if (dup2(file, STDIN_FILENO) < 0) {
+                std::cerr << "dup2()\n";
+                exit(1);
+            }
 
-        argv[argc - 1] = NULL;
+            close(file);
+        }
 
-        child_hook();
+        if (redirect_out) {
+            auto filename = redirect_out->token.type == String ?
+                redirect_out->token.content : get$eval(redirect_out->token);
+            auto file = open(filename.c_str(), O_CREAT | O_WRONLY, 0644);
 
-        execvp(argv[0], argv);
+            if (file < 0)
+                std::cerr << filename << ": No such file or directory\n";
+
+            if (dup2(file, STDOUT_FILENO) < 0) {
+                std::cerr << "dup2()\n";
+                exit(1);
+            }
+
+            std::cout.flush();
+
+            close(file);
+        }
+
+        child_hook(STDIN_FILENO, STDOUT_FILENO);
+
+        execvp(argv[0], &argv[0]);
 
         std::cerr << "Failed to execvp()\n";
         exit(1);
     }
 
-    return Process { pid, get$pname(expr), proc_io };
+    return Process { pid, get$pname(expr) };
 }
 
 Process execute(Expression* expr) {
-    return execute(expr, [=]{});
+    return execute(expr, [=](int, int){});
 }
 
 void handle$keyword(Expression* expr) {
@@ -265,7 +316,7 @@ void handle$pipe(Expression* expr) {
         }
 
         proc = execute(child,
-            [&](int fd_in = STDIN_FILENO, int fd_out = STDOUT_FILENO) -> void {
+            [&](int fd_in, int fd_out) -> void {
                 // This entire lambda function executes within the child process.
                 if (child != expr->children.front()) {
                     dup2(last_io.fd[0], fd_in);

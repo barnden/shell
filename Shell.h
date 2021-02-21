@@ -12,7 +12,6 @@ struct Pipe {
 struct Process {
     pid_t pid;
     std::string name;
-    Pipe pipe;
 };
 
 enum KEYWORD {
