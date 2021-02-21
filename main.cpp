@@ -14,8 +14,8 @@
 #include "Parser.h"
 #include "PromptString.h"
 
-#define DEBUG_AST true
-#define DEBUG_TOKEN true
+#define DEBUG_AST false
+#define DEBUG_TOKEN false
 
 void print$bgproc() {
     for (auto&proc : BShell::g_processes) {
@@ -107,25 +107,6 @@ int main(int argc, int*argv[]) {
     // session's commands a la bash.
     free(hstate);
     free(hlist);
-
-    while (BShell::g_processes.size()) {
-        // Terminate all children using SIGTERM
-        BShell::erase_dead_children();
-
-        for (auto&proc : BShell::g_processes)
-            kill(proc.pid, SIGTERM);
-    }
-
-    if (waitpid(-1, NULL, WNOHANG) == 0) {
-        // This is just a sanity check, this should never be executed assuming that we have
-        // successfully kept track of all backgrounded children and sent SIGTERM if they
-        // were still on going when the shell is closing.
-
-        std::cerr << "Zombie processes detected.\n";
-
-        // Not much information to give to user because BShell::g_processes should be empty
-        // if we manage to get here.
-    }
 
     std::cout << "brandon shell exited\n";
 
