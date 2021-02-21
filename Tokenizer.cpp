@@ -43,10 +43,8 @@ void Tokenizer::add_token(Token token) {
 bool Tokenizer::add_quote(int index, int mask) {
     m_quotes[index] += !(enquote() & mask);
 
-    if (enquote() & (0xF ^ mask) && m_string_buf.size()) {
-        m_force_sticky = true;
+    if (enquote() & (0xF ^ mask) && m_string_buf.size())
         add_string_buf();
-    }
 
     if (m_quotes[index] && !(m_quotes[index] % 2)) {
         add_token(Token { index <= 1 ? String : Eval,
@@ -77,17 +75,17 @@ void Tokenizer::add_string_buf() {
     if (m_force_sticky) {
         type = Sticky;
         m_force_sticky = false;
-    } else {
-        if (g_keywords.contains(m_string_buf)) {
+    }
+
+    if (g_keywords.contains(m_string_buf)) {
             type = Key;
             m_force_string = true;
-        } else if (!m_force_string) {
-            auto path = get$executable_path(m_string_buf);
+    } else if (!m_force_string) {
+        auto path = get$executable_path(m_string_buf);
 
-            if (path.size()) {
-                type = Executable;
-                m_force_string = true;
-            }
+        if (path.size()) {
+            type = Executable;
+            m_force_string = true;
         }
     }
 
@@ -116,6 +114,7 @@ void Tokenizer::tokenize_input() {
                 if (enquote())
                     break;
 
+                m_force_sticky = false;
                 add_string_buf();
 
                 continue;
@@ -188,10 +187,13 @@ void Tokenizer::tokenize_input() {
             }
         }
 
+        m_force_sticky = true;
         m_string_buf += c;
 
-        if (last)
+        if (last) {
+            m_force_sticky = false;
             add_string_buf();
+        }
     }
 }
 
