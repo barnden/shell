@@ -10,7 +10,8 @@
 
 const char* TokenNames[] = {
     "NULL", "STRING", "EQUAL", "EXECUTABLE", "BACKGROUND", "SEQUENTIAL",
-    "SEQUENTIAL_CON", "PIPE", "REDIRECT_OUT", "REDIRECT_IN", "KEYWORD", "EVAL"
+    "SEQUENTIAL_CON", "PIPE", "REDIRECT_OUT", "REDIRECT_IN", "KEYWORD",
+    "EVAL", "STICKY"
 };
 
 namespace BShell {
@@ -19,11 +20,13 @@ std::unordered_set<std::string> g_keywords = {
 };
 
 Tokenizer::Tokenizer(const char*input) :
+    m_force_sticky(),
     m_input(input),
     m_string_buf(),
     m_quotes(),
     m_gobble(),
-    m_force_string()
+    m_force_string(),
+    m_tokens()
 {
     tokenize_input();
 }
@@ -40,8 +43,10 @@ void Tokenizer::add_token(Token token) {
 bool Tokenizer::add_quote(int index, int mask) {
     m_quotes[index] += !(enquote() & mask);
 
-    if (enquote() & (0xF ^ mask))
+    if (enquote() & (0xF ^ mask) && m_string_buf.size()) {
+        m_force_sticky = true;
         add_string_buf();
+    }
 
     if (m_quotes[index] && !(m_quotes[index] % 2)) {
         add_token(Token { index <= 1 ? String : Eval,
@@ -69,15 +74,20 @@ void Tokenizer::add_string_buf() {
 
     auto type = TokenType::String;
 
-    if (g_keywords.contains(m_string_buf)) {
-        type = TokenType::Key;
-        m_force_string = true;
-    } else if (!m_force_string) {
-        auto path = get$executable_path(m_string_buf);
-
-        if (path.size()) {
-            type = TokenType::Executable;
+    if (m_force_sticky) {
+        type = Sticky;
+        m_force_sticky = false;
+    } else {
+        if (g_keywords.contains(m_string_buf)) {
+            type = Key;
             m_force_string = true;
+        } else if (!m_force_string) {
+            auto path = get$executable_path(m_string_buf);
+
+            if (path.size()) {
+                type = Executable;
+                m_force_string = true;
+            }
         }
     }
 

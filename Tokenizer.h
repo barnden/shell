@@ -17,7 +17,8 @@ enum TokenType : uint8_t {
     RedirectOut,    // redirect out (>)
     RedirectIn,     // redirect in (<)
     Key,            // keyword for shell (cd, ?export)
-    Eval            // eval string (enclosed in backticks or "$()")
+    Eval,           // eval string (enclosed in backticks or "$()")
+    Sticky,         // sticky strings, the parser merges the sticky string with adjacent strings
 };
 
 struct Token {
@@ -40,7 +41,7 @@ private:
     const char* m_input;
     std::string m_string_buf;
     int m_quotes[4];
-    bool m_gobble, m_force_string;
+    bool m_gobble, m_force_string, m_force_sticky;
     std::vector<Token> m_tokens;
 };
 
