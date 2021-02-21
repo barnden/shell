@@ -180,8 +180,10 @@ void handle$cd(std::string dir) {
         g_prev_wd = cwd;
 }
 
-Process execute(Expression*expr, auto&& child_hook) {
+template<typename T>
+Process execute(Expression* expr, T&& child_hook) {
     auto pid = fork();
+    auto proc_io = Pipe {};
 
     if (pid < 0) {
         std::cerr << "Shell execute function failed to fork.\n";
@@ -209,10 +211,10 @@ Process execute(Expression*expr, auto&& child_hook) {
         exit(1);
     }
 
-    return Process { pid, get$pname(expr) };
+    return Process { pid, get$pname(expr), proc_io };
 }
 
-Process execute(Expression*expr) {
+Process execute(Expression* expr) {
     return execute(expr, [=]{});
 }
 
@@ -248,7 +250,7 @@ void handle$background(Expression* expr) {
     g_processes.push_back(Process { proc.pid, proc.name });
 }
 
-void handle$pipe(Expression*expr) {
+void handle$pipe(Expression* expr) {
     auto last_io = Pipe {};
 
     for (auto& child : expr->children) {
@@ -262,56 +264,31 @@ void handle$pipe(Expression*expr) {
             exit(1);
         }
 
-        if (child == expr->children.front()) {
-            // The first process in the chain never reads from proc_io
-            proc = execute(child,
-                [=]() -> void {
-                    dup2(proc_io.fd[1], STDOUT_FILENO);
-
-                    close(proc_io.fd[0]);
-                    close(proc_io.fd[1]);
-                }
-            );
-
-            last_io = proc_io;
-        } else if (child == expr->children.back()) {
-            // The last process in the chain never writes to proc_io
-            proc = execute(child,
-                [=]() -> void {
-                    dup2(last_io.fd[0], STDIN_FILENO);
+        proc = execute(child,
+            [&](int fd_in = STDIN_FILENO, int fd_out = STDOUT_FILENO) -> void {
+                // This entire lambda function executes within the child process.
+                if (child != expr->children.front()) {
+                    dup2(last_io.fd[0], fd_in);
 
                     close(last_io.fd[0]);
                     close(last_io.fd[1]);
-
-                    close(proc_io.fd[0]);
-                    close(proc_io.fd[1]);
                 }
-            );
 
+                if (child != expr->children.back())
+                    dup2(proc_io.fd[1], fd_out);
+
+                close(proc_io.fd[0]);
+                close(proc_io.fd[1]);
+            }
+        );
+
+        if (child != expr->children.front()) {
+            // Close the file descriptor in the parent process.
             close(last_io.fd[0]);
             close(last_io.fd[1]);
-
-            close(proc_io.fd[0]);
-            close(proc_io.fd[1]);
-        } else {
-            proc = execute(child,
-                [=]() -> void {
-                    dup2(last_io.fd[0], STDIN_FILENO);
-                    dup2(proc_io.fd[1], STDOUT_FILENO);
-
-                    close(last_io.fd[0]);
-                    close(last_io.fd[1]);
-
-                    close(proc_io.fd[0]);
-                    close(proc_io.fd[1]);
-                }
-            );
-
-            close(last_io.fd[0]);
-            close(last_io.fd[1]);
-
-            last_io = proc_io;
         }
+
+        last_io = proc_io;
 
         if (waitpid(-1, &g_exit_fg, 0) < 0) {
             std::cerr << "waitpid error\n";
@@ -341,7 +318,7 @@ void erase_dead_children() {
     g_processes.erase(
         std::remove_if(
             g_processes.begin(), g_processes.end(),
-            [=](const Process&proc) -> bool { return waitpid(proc.pid, &g_exit_bg, WNOHANG) != 0; }
+            [=](const Process& proc) -> bool { return waitpid(proc.pid, &g_exit_bg, WNOHANG) != 0; }
         ), g_processes.end()
     );
 }
