@@ -6,7 +6,7 @@
 using namespace BShell;
 
 namespace BShell {
-std::string PS1 = "[B] \\u@\\h \\w\\$ ";
+std::string PS1 = "\x1b[32m""[B]""\x1b[34m"" \\u@\\h \\w\\$ ""\x1b[m";
 
 std::string parse$PS_format_string(const char&c) {
     switch (c) {
