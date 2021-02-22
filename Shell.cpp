@@ -183,76 +183,102 @@ void handle$cd(std::string dir) {
         g_prev_wd = cwd;
 }
 
-template<typename T>
-Process execute(Expression* expr, T&& child_hook) {
-    auto pid = fork();
-    auto children = expr->children;
-    auto cmd = expr->token.content.c_str();
+void handle$redirect_in(Expression* redirect_in) {
+    if (redirect_in == nullptr) return;
 
-    Expression* redirect_in = nullptr;
-    Expression* redirect_out = nullptr;
+    auto filename = redirect_in->token.type == String ?
+        redirect_in->token.content : get$eval(redirect_in->token);
+    auto file = open(filename.c_str(), O_RDONLY);
 
-    std::vector<char*> argv = { const_cast<char*>(cmd) };
+    if (file < 0) {
+        std::cerr << filename << ": No such file or directory\n";
+        exit(1);
+    }
 
-    for (auto& child : children) {
+    if (dup2(file, STDIN_FILENO) < 0) {
+        std::cerr << "dup2()\n";
+        exit(1);
+    }
+
+    close(file);
+}
+
+void handle$redirect_out(Expression* redirect_out) {
+    if (redirect_out == nullptr) return;
+
+    auto filename = redirect_out->token.type == String ?
+        redirect_out->token.content : get$eval(redirect_out->token);
+    auto file = open(filename.c_str(), O_CREAT | O_WRONLY, 0644);
+
+    if (file < 0)
+        std::cerr << filename << ": No such file or directory\n";
+
+    if (dup2(file, STDOUT_FILENO) < 0) {
+        std::cerr << "dup2()\n";
+        exit(1);
+    }
+
+    std::cout.flush();
+
+    close(file);
+}
+
+void handle$argv_sticky(std::vector<char*>& argv, bool& sticky) {
+
+}
+
+std::vector<char*> handle$argv(Expression* expr) {
+    auto argv = std::vector<char*>{ const_cast<char*>(expr->token.content.c_str()) };
+    auto sticky = false;
+
+    auto handle_strings = [&](std::string str) -> void {
+        if (sticky) {
+            auto prev = std::string(argv.back());
+            sticky = false;
+
+            str = prev + str;
+            argv.pop_back();
+        }
+
+        argv.push_back(const_cast<char*>(str.c_str()));
+    };
+
+    for (auto& child : expr->children) {
         switch (child->token.type) {
-            case String:
+            case StickyRight:
+                sticky = true;
                 argv.push_back(const_cast<char*>(child->token.content.c_str()));
                 break;
+            case String:
+                handle_strings(child->token.content);
+                break;
             case Eval:
-                argv.push_back(const_cast<char*>(get$eval(child->token).c_str()));
+                handle_strings(get$eval(child->token));
                 break;
             case RedirectIn:
-                redirect_in = child->children[0];
+                handle$redirect_in(child->children[0]);
                 break;
             case RedirectOut:
-                redirect_out = child->children[0];
+                handle$redirect_out(child->children[0]);
                 break;
         }
     }
 
+    argv.push_back(NULL);
+
+    return argv;
+}
+
+template<typename T>
+Process execute(Expression* expr, T&& child_hook) {
+    auto pid = fork();
+
     if (pid < 0) {
-        std::cerr << "Shell execute function failed to fork.\n";
+        std::cerr << "Failed to fork()\n";
 
         exit(1);
     } else if (!pid) {
-        argv.push_back(NULL);
-
-        if (redirect_in) {
-            auto filename = redirect_in->token.type == String ?
-                redirect_in->token.content : get$eval(redirect_in->token);
-            auto file = open(filename.c_str(), O_RDONLY);
-
-            if (file < 0) {
-                std::cerr << filename << ": No such file or directory\n";
-                exit(1);
-            }
-
-            if (dup2(file, STDIN_FILENO) < 0) {
-                std::cerr << "dup2()\n";
-                exit(1);
-            }
-
-            close(file);
-        }
-
-        if (redirect_out) {
-            auto filename = redirect_out->token.type == String ?
-                redirect_out->token.content : get$eval(redirect_out->token);
-            auto file = open(filename.c_str(), O_CREAT | O_WRONLY, 0644);
-
-            if (file < 0)
-                std::cerr << filename << ": No such file or directory\n";
-
-            if (dup2(file, STDOUT_FILENO) < 0) {
-                std::cerr << "dup2()\n";
-                exit(1);
-            }
-
-            std::cout.flush();
-
-            close(file);
-        }
+        auto argv = handle$argv(expr);
 
         child_hook(STDIN_FILENO, STDOUT_FILENO);
 
