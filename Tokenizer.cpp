@@ -11,7 +11,7 @@
 const char* TokenNames[] = {
     "NULL", "STRING", "EQUAL", "EXECUTABLE", "BACKGROUND", "SEQUENTIAL",
     "SEQUENTIAL_CON", "PIPE", "REDIRECT_OUT", "REDIRECT_IN", "KEYWORD",
-    "EVAL", "STICKY"
+    "EVAL", "STICKY_RIGHT", "STICKY_LEFT"
 };
 
 namespace BShell {
@@ -20,7 +20,8 @@ std::unordered_set<std::string> g_keywords = {
 };
 
 Tokenizer::Tokenizer(const char*input) :
-    m_force_sticky(),
+    m_make_sticky_l(),
+    m_make_sticky_r(),
     m_input(input),
     m_string_buf(),
     m_quotes(),
@@ -51,6 +52,8 @@ bool Tokenizer::add_quote(int index, int mask) {
             (m_string_buf.size() > 1) ? m_string_buf.substr(1) : m_string_buf
         });
 
+        m_make_sticky_l = true;
+
         return true;
     }
 
@@ -72,9 +75,14 @@ void Tokenizer::add_string_buf() {
 
     auto type = TokenType::String;
 
-    if (m_force_sticky) {
-        type = Sticky;
-        m_force_sticky = false;
+    if (m_make_sticky_r) {
+        type = StickyRight;
+        m_make_sticky_r = false;
+    }
+
+    if (m_make_sticky_l) {
+        type = StickyLeft;
+        m_make_sticky_l = false;
     }
 
     if (g_keywords.contains(m_string_buf)) {
@@ -114,7 +122,7 @@ void Tokenizer::tokenize_input() {
                 if (enquote())
                     break;
 
-                m_force_sticky = false;
+                m_make_sticky_r = m_make_sticky_l = false;
                 add_string_buf();
 
                 continue;
@@ -187,11 +195,11 @@ void Tokenizer::tokenize_input() {
             }
         }
 
-        m_force_sticky = true;
+        m_make_sticky_r = true;
         m_string_buf += c;
 
         if (last) {
-            m_force_sticky = false;
+            m_make_sticky_r = false;
             add_string_buf();
         }
     }

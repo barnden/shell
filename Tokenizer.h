@@ -18,7 +18,8 @@ enum TokenType : uint8_t {
     RedirectIn,     // redirect in (<)
     Key,            // keyword for shell (cd, ?export)
     Eval,           // eval string (enclosed in backticks or "$()")
-    Sticky,         // sticky strings, the parser merges the sticky string with adjacent strings
+    StickyRight,    // sticky string (right), makes a string with next token
+    StickyLeft,     // sticky string (left), makes a string with previous token
 };
 
 struct Token {
@@ -41,7 +42,7 @@ private:
     const char* m_input;
     std::string m_string_buf;
     int m_quotes[4];
-    bool m_gobble, m_force_string, m_force_sticky;
+    bool m_gobble, m_force_string, m_make_sticky_l, m_make_sticky_r;
     std::vector<Token> m_tokens;
 };
 
