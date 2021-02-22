@@ -25,6 +25,8 @@ private:
     void parse_redirection();
     void parse_current();
 
+    Expression* glue_sticky();
+
     Token* peek();
 
     bool m_err;

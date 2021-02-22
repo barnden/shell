@@ -23,10 +23,54 @@ Parser::Parser(std::vector<Token>&tokens) :
 
 std::vector<Expression*> Parser::asts() const { return m_asts; }
 
-void Parser::add_strings(Expression* expr) {
-    while ((m_next = peek()) != nullptr && (m_next->type == String || m_next->type == Eval)) {
-        expr->children.push_back(new Expression(*m_next));
+Expression* Parser::glue_sticky() {
+    Expression* expr = nullptr;
+
+    if (m_cur->type == StickyRight &&
+        peek() &&
+        (
+            peek()->type == String ||
+            peek()->type == StickyLeft
+        )
+    ) {
+        expr = new Expression(Token {
+            String,
+            m_cur->content + peek()->content
+        });
+
         m_cur++;
+    }
+
+    if (m_cur->type == String && peek() && peek()->type == StickyLeft) {
+        if (expr)
+            expr->token.content += peek()->content;
+        else
+            expr = new Expression(Token {
+                String,
+                m_cur->content + peek()->content
+            });
+
+        m_cur++;
+    }
+
+    return expr;
+}
+
+void Parser::add_strings(Expression* expr) {
+    while (
+        (m_next = peek()) != nullptr &&
+        (
+            m_next->type == StickyRight ||
+            m_next->type == StickyLeft ||
+            m_next->type == String ||
+            m_next->type == Eval
+        )
+    ) {
+        m_cur++;
+
+        auto glue = glue_sticky();
+
+        expr->children.push_back(glue ? glue : new Expression(*m_next));
     }
 }
 
