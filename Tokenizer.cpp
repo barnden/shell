@@ -122,7 +122,7 @@ void Tokenizer::tokenize_input() {
                 if (enquote())
                     break;
 
-                m_make_sticky_r = m_make_sticky_l = false;
+                m_make_sticky_r = false;
                 add_string_buf();
 
                 continue;
