@@ -153,7 +153,7 @@ void Parser::parse_sequential() {
         // flatten the tree into one layer, where children from
         // left have higher precedence when executing.
 
-        if (m_asts.back()->token.type == RedirectPipe) {
+        if (m_asts.back()->token.type == type) {
             expr = m_asts.back();
         } else {
             expr = new Expression(*m_cur);

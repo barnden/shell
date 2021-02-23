@@ -331,6 +331,19 @@ void handle$background(Expression* expr) {
     g_processes.push_back(Process { proc.pid, proc.name });
 }
 
+void handle$sequential(Expression* expr) {
+    for (auto& child : expr->children) {
+        auto proc = Process {};
+
+        proc = execute(child, [&]() -> void { });
+
+        waitpid(proc.pid, &g_exit_fg, 0);
+
+        if (expr->token.type == SequentialIf && g_exit_fg != 0)
+            break;
+    }
+}
+
 template<typename T>
 void handle$pipe(Expression* expr, T&& last_hook) {
     auto last_io = Pipe {};
@@ -393,6 +406,9 @@ void handle$ast(Expression* ast, T&& hook) {
             return handle$background(ast);
         case RedirectPipe:
             return handle$pipe(ast, hook);
+        case SequentialIf:
+        case Sequential:
+            return handle$sequential(ast);
         default:
             std::cerr << "Bad token type passed to handle$ast\n";
             exit(1);
