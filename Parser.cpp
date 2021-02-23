@@ -102,7 +102,9 @@ void Parser::parse_current() {
             parse_redirection();
             break;
         case RedirectPipe:
-            parse_pipe();
+        case SequentialIf:
+        case Sequential:
+            parse_sequential();
             break;
         case Background:
             parse_background();
@@ -116,7 +118,7 @@ void Parser::parse_redirection() {
         m_asts.back()->token.type == RedirectPipe ||
         m_asts.back()->token.type == Executable
     )) {
-        if (m_next == nullptr || (m_next->type != Eval && m_next->type != String)) {
+        if (m_next == nullptr || (m_next->type != Eval && m_next->type != String && m_next->type != StickyLeft)) {
             // Should probably make a lookup for the token's corresponding char
             PARSER_ERR("Syntax error at unexpected redirection token.");
             return;
@@ -135,7 +137,9 @@ void Parser::parse_redirection() {
     } else PARSER_ERR("Syntax error near unexpected redirection token.");
 }
 
-void Parser::parse_pipe() {
+void Parser::parse_sequential() {
+    auto type = m_cur->type;
+
     if (m_asts.size() && m_asts.back()->token.type != String) {
         if (m_next == nullptr || (m_next->type != Executable && m_next->type != Key)) {
             // We do not currently support a continuation prompt

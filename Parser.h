@@ -21,7 +21,7 @@ private:
     void parse();
     void add_strings(Expression*);
     void parse_background();
-    void parse_pipe();
+    void parse_sequential();
     void parse_redirection();
     void parse_current();
 
