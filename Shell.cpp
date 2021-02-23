@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -148,23 +149,92 @@ int get$file(std::string path) {
 
 }
 
-std::string get$eval(Token eval) {
-    return std::string {};
+void get$eval(std::string& str, Token token) {
+    // Recursively tokenize and parse eval string until we get something
+    auto tokens = Tokenizer(token.content.c_str()).tokens();
+    auto asts = Parser(tokens).asts();
+    auto eval_io = Pipe {};
+
+    if (pipe(eval_io.fd) < 0) {
+        std::cerr << "pipe()\n";
+        exit(1);
+    }
+
+    for (auto& ast : asts){
+        handle$ast(ast, [&]{
+            dup2(eval_io.fd[1], STDOUT_FILENO);
+            std::cout.flush();
+
+            close(eval_io.fd[0]);
+            close(eval_io.fd[1]);
+        });
+
+        ast$delete_children(ast);
+    }
+
+    write(eval_io.fd[1], NULL, 1);
+    close(eval_io.fd[1]);
+
+    auto* buf = new char [BUFSIZ];
+    auto fmem = fdopen(eval_io.fd[0], "r");
+
+    while (fgets(buf, BUFSIZ, fmem))
+        str += buf;
+
+    delete[] buf;
+
+    close(eval_io.fd[0]);
 }
 
-void handle$cd(std::string dir) {
-    auto* dirc = dir.c_str();
+void handle$argv_strings(std::vector<char*>& argv, bool& sticky, Token token) {
+    char* strbuf = nullptr;
+    auto str = std::string {};
+
+    if (token.type == Eval)
+        get$eval(str, token);
+    else
+        str = token.content;
+
+    if (sticky || token.type == StickyLeft) {
+        str = std::string { argv.back() } + str;
+
+        argv.pop_back();
+    }
+
+    if (token.type == StickyRight)
+        sticky = true;
+
+    // Remove unprintable control characters like SOH, STX, ETX, etc.
+    str.erase(std::remove_if(str.begin(), str.end(), [=](int c) { return !std::isprint(c); } ), str.end());
+
+    // We can't just add the const_cast of str.c_str into the argv vector
+    // due to issues with the lifetime of the string objects.
+    // Therefore, copy into a strbuf on the heap that persists until exec.
+    strbuf = new char [str.size() + 1];
+    strcpy(strbuf, str.c_str());
+
+    argv.push_back(strbuf);
+}
+
+void handle$cd(Expression* expr) {
+    auto argv = std::vector<char*> {};
+    auto sticky = false;
+
+    for (auto& child : expr->children)
+        handle$argv_strings(argv, sticky, child->token);
+
+    auto* dir = argv.size() ? argv[0] : nullptr;;
     auto cwd = get$cwd();
     auto stat = 0;
 
-    if (!dir.size())
+    if (!dir)
         stat = chdir(get$home().c_str());
     else if (dir[0] == '~') {
         auto home = get$home();
-        auto* path = new char [strlen(dirc) + home.size()];
+        auto* path = new char [strlen(dir) + home.size()];
 
         strcpy(path, home.c_str());
-        strcpy(path + home.size(), dirc + 1);
+        strcpy(path + home.size(), dir + 1);
 
         stat = chdir(path);
 
@@ -174,20 +244,44 @@ void handle$cd(std::string dir) {
             stat = chdir(g_prev_wd.c_str());
             std::cout << g_prev_wd << '\n';
         } else std::cerr << "g_prev_wd not set\n";
-    } else stat = chdir(dirc);
+    } else stat = chdir(dir);
 
     // Don't change previous directory on error.
     if (stat < 0)
         std::cerr << "Failed to change directory\n";
     else
         g_prev_wd = cwd;
+
+    for (auto& arg : argv)
+        delete[] arg;
+}
+
+void handle$keyword(Expression* expr) {
+    auto kw = expr->token.content;
+    auto index = std::distance(g_keywords.find(kw), g_keywords.end());
+
+    // TODO: Maybe use an enum for more readability
+    switch (index) {
+        case 1: // export
+            break;
+        case 2: // cd
+            handle$cd(expr);
+            break;
+        case 3: // jobs
+            break;
+    }
 }
 
 void handle$redirect_in(Expression* redirect_in) {
     if (redirect_in == nullptr) return;
 
-    auto filename = redirect_in->token.type == String ?
-        redirect_in->token.content : get$eval(redirect_in->token);
+    auto filename = std::string {};
+
+    if (redirect_in->token.type == String)
+        filename = redirect_in->token.content;
+    else
+        get$eval(filename, redirect_in->token);
+
     auto file = open(filename.c_str(), O_RDONLY);
 
     if (file < 0) {
@@ -206,8 +300,13 @@ void handle$redirect_in(Expression* redirect_in) {
 void handle$redirect_out(Expression* redirect_out) {
     if (redirect_out == nullptr) return;
 
-    auto filename = redirect_out->token.type == String ?
-        redirect_out->token.content : get$eval(redirect_out->token);
+    auto filename = std::string {};
+
+    if (redirect_out->token.type == String)
+        filename = redirect_out->token.content;
+    else
+        get$eval(filename, redirect_out->token);
+
     auto file = open(filename.c_str(), O_CREAT | O_WRONLY, 0644);
 
     if (file < 0)
@@ -223,37 +322,17 @@ void handle$redirect_out(Expression* redirect_out) {
     close(file);
 }
 
-void handle$argv_sticky(std::vector<char*>& argv, bool& sticky) {
-
-}
-
 std::vector<char*> handle$argv(Expression* expr) {
     auto argv = std::vector<char*>{ const_cast<char*>(expr->token.content.c_str()) };
     auto sticky = false;
 
-    auto handle_strings = [&](std::string str) -> void {
-        if (sticky) {
-            auto prev = std::string(argv.back());
-            sticky = false;
-
-            str = prev + str;
-            argv.pop_back();
-        }
-
-        argv.push_back(const_cast<char*>(str.c_str()));
-    };
-
     for (auto& child : expr->children) {
         switch (child->token.type) {
             case StickyRight:
-                sticky = true;
-                argv.push_back(const_cast<char*>(child->token.content.c_str()));
-                break;
-            case String:
-                handle_strings(child->token.content);
-                break;
             case Eval:
-                handle_strings(get$eval(child->token));
+            case String:
+            case StickyLeft:
+                handle$argv_strings(argv, sticky, child->token);
                 break;
             case RedirectIn:
                 handle$redirect_in(child->children[0]);
@@ -280,7 +359,7 @@ Process execute(Expression* expr, T&& child_hook) {
     } else if (!pid) {
         auto argv = handle$argv(expr);
 
-        child_hook(STDIN_FILENO, STDOUT_FILENO);
+        child_hook();
 
         execvp(argv[0], &argv[0]);
 
@@ -291,35 +370,15 @@ Process execute(Expression* expr, T&& child_hook) {
     return Process { pid, get$pname(expr) };
 }
 
-Process execute(Expression* expr) {
-    return execute(expr, [=](int, int){});
-}
-
-void handle$keyword(Expression* expr) {
-    auto kw = expr->token.content;
-    auto index = std::distance(g_keywords.find(kw), g_keywords.end());
-    auto args = expr->children.size() ? expr->children[0]->token.content : std::string {};
-
-    // TODO: Maybe use an enum for more readability
-    switch (index) {
-        case 1: // export
-            break;
-        case 2: // cd
-            handle$cd(args);
-            break;
-        case 3: // jobs
-            break;
-    }
-}
-
-void handle$executable(Expression* expr) {
-    auto proc = execute(expr);
+template<typename T>
+void handle$executable(Expression* expr, T&& hook) {
+    auto proc = execute(expr, hook);
 
     waitpid(proc.pid, &g_exit_fg, 0);
 }
 
 void handle$background(Expression* expr) {
-    auto proc = execute(expr->children[0]);
+    auto proc = execute(expr->children[0], [=]{});
 
     std::cout << '[' << g_processes.size() + 1 << "] " << proc.pid << '\n';
 
@@ -327,7 +386,8 @@ void handle$background(Expression* expr) {
     g_processes.push_back(Process { proc.pid, proc.name });
 }
 
-void handle$pipe(Expression* expr) {
+template<typename T>
+void handle$pipe(Expression* expr, T&& last_hook) {
     auto last_io = Pipe {};
 
     for (auto& child : expr->children) {
@@ -342,17 +402,19 @@ void handle$pipe(Expression* expr) {
         }
 
         proc = execute(child,
-            [&](int fd_in, int fd_out) -> void {
+            [&]() -> void {
                 // This entire lambda function executes within the child process.
                 if (child != expr->children.front()) {
-                    dup2(last_io.fd[0], fd_in);
+                    dup2(last_io.fd[0], STDIN_FILENO);
 
                     close(last_io.fd[0]);
                     close(last_io.fd[1]);
                 }
 
                 if (child != expr->children.back())
-                    dup2(proc_io.fd[1], fd_out);
+                    dup2(proc_io.fd[1], STDOUT_FILENO);
+                else
+                    last_hook();
 
                 close(proc_io.fd[0]);
                 close(proc_io.fd[1]);
@@ -368,27 +430,32 @@ void handle$pipe(Expression* expr) {
         last_io = proc_io;
 
         if (waitpid(-1, &g_exit_fg, 0) < 0) {
-            std::cerr << "waitpid error\n";
+            std::cerr << "waitpid()\n";
 
             exit(1);
         }
     }
 }
 
-void handle$ast(Expression* ast) {
+template<typename T>
+void handle$ast(Expression* ast, T&& hook) {
     switch (ast->token.type) {
         case Key:
             return handle$keyword(ast);
         case Executable:
-            return handle$executable(ast);
+            return handle$executable(ast, hook);
         case Background:
             return handle$background(ast);
         case RedirectPipe:
-            return handle$pipe(ast);
+            return handle$pipe(ast, hook);
         default:
-            std::cerr << "Unknown token type passed to handle$ast\n";
-            // exit(1);
+            std::cerr << "Bad token type passed to handle$ast\n";
+            exit(1);
     }
+}
+
+void handle$ast(Expression* ast) {
+    handle$ast(ast, [=](){});
 }
 
 void erase_dead_children() {
