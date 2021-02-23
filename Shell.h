@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "Parser.h"
+#include "Tokenizer.h"
 
 namespace BShell {
 struct Pipe {
@@ -31,6 +32,10 @@ std::string get$executable_path(std::string);
 void set$cwd(std::string);
 void erase_dead_children();
 
+void handle$argv_strings(std::vector<char*>&, bool&, Token);
+
+template<typename T>
+void handle$ast(Expression*, T&&);
 void handle$ast(Expression*);
 
 extern std::string g_prev_wd;
