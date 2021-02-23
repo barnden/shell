@@ -22,22 +22,6 @@ std::vector<Process> g_processes;
 int g_exit_fg = 0;
 int g_exit_bg = 0;
 
-bool file$access(std::string path, int tests) {
-    return access(path.c_str(), tests) != -1;
-}
-
-bool file$is_executable(std::string path) {
-    return file$access(path, X_OK);
-}
-
-bool file$is_readable(std::string path) {
-    return file$access(path, R_OK);
-}
-
-bool file$is_writable(std::string path) {
-    return file$access(path, W_OK);
-}
-
 std::string get$cwd() {
     // From getcwd(3) it says get_current_dir_name() will malloc a
     // string large enough to fit the current working dir.
@@ -137,7 +121,7 @@ std::string get$executable_path(std::string cmd) {
     for (; j != std::string::npos; j = env_path.find(':', i = j + 1)) {
         auto tmp = env_path.substr(i, j - i) + "/" + cmd;
 
-        if (file$is_executable(tmp)) {
+        if (access(tmp.c_str(), X_OK) != -1) {
             path = tmp;
             break;
         }
