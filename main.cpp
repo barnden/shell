@@ -14,8 +14,8 @@
 #include "Parser.h"
 #include "PromptString.h"
 
-#define DEBUG_AST false
 #define DEBUG_TOKEN false
+#define DEBUG_AST false
 
 void print$bgproc() {
     for (auto&proc : BShell::g_processes) {
@@ -30,9 +30,7 @@ void print$bgproc() {
         );
         #else
         std::cout
-        << '['
-        << (&proc - &*BShell::g_processes.begin() + 1)
-        << "] Done "
+        << '[' << (&proc - &*BShell::g_processes.begin() + 1) << "] Done "
         << proc.name
         << '\n';
         #endif
@@ -43,7 +41,7 @@ void print$bgproc() {
 // the programmer documentation is found below.
 // https://tiswww.case.edu/php/chet/readline/readline.html#IDX338
 
-int main(int argc, int*argv[]) {
+int main(int argc, int* argv[]) {
     // I can't find any resources on whether this is actually "safe", as cannot use the
     // GNU readline library in the BShell::handler$posix_sig(int) function, as readline
     // uses malloc for most functions that display to the terminal.
