@@ -222,7 +222,7 @@ void handle$redirect_in(Expression* redirect_in) {
 
     auto filename = std::string {};
 
-    if (redirect_in->token.type == String)
+    if (redirect_in->token.type == String || redirect_in->token.type == StickyLeft)
         filename = redirect_in->token.content;
     else
         get$eval(filename, redirect_in->token);
@@ -247,7 +247,7 @@ void handle$redirect_out(Expression* redirect_out) {
 
     auto filename = std::string {};
 
-    if (redirect_out->token.type == String)
+    if (redirect_out->token.type == String || redirect_out->token.type == StickyLeft)
         filename = redirect_out->token.content;
     else
         get$eval(filename, redirect_out->token);
