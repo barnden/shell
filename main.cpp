@@ -59,7 +59,6 @@ int main(int argc, int* argv[]) {
     using_history();
     auto * hstate = history_get_history_state();
     auto ** hlist = history_list();
-    stifle_history(64);
 
     // Continually prompt the user for input
     while (true) {

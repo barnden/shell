@@ -106,6 +106,9 @@ void Parser::parse_current() {
         case Sequential:
             parse_sequential();
             break;
+        case Equal:
+            parse_equal();
+            break;
         case Background:
             parse_background();
             break;
@@ -170,6 +173,15 @@ void Parser::parse_sequential() {
 
         m_asts.push_back(expr);
     } else PARSER_ERR("Syntax error near unexpected token '|'.");
+}
+
+void Parser::parse_equal() {
+    if (m_asts.size() && m_asts.back()->token.type == String) {
+        auto expr = new Expression(*m_cur);
+        expr->children.push_back(m_asts.back());
+
+        m_asts.pop_back();
+    } else PARSER_ERR("Syntax error near unexpected token '='.")
 }
 
 void Parser::parse() {

@@ -24,6 +24,7 @@ private:
     void parse_sequential();
     void parse_redirection();
     void parse_current();
+    void parse_equal();
 
     Expression* glue_sticky();
 

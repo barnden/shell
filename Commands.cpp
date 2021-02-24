@@ -30,7 +30,7 @@ void command$cd(Expression* expr) {
         stat = chdir(path);
 
         delete[] path;
-    } else if (dir == "-") {
+    } else if (strcmp(dir, "-") == 0) {
         if (g_prev_wd.size()) {
             stat = chdir(g_prev_wd.c_str());
             std::cout << g_prev_wd << '\n';
