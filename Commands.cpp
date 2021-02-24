@@ -4,6 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "Commands.h"
 #include "Parser.h"
 #include "Shell.h"
 
@@ -49,5 +50,18 @@ void command$cd(const std::shared_ptr<Expression>& expr) {
         std::cerr << "Failed to change directory\n";
     else
         g_prev_wd = cwd;
+}
+
+void command$set_env(const std::shared_ptr<Expression>& expr) {
+    if (expr->children.size() < 2) {
+        std::cerr << "Syntax error '='.\n";
+        return;
+    }
+
+    auto key = expr->children[0]->token.content;
+    auto val = expr->children[1]->token.content;
+
+    if (setenv(key.c_str(), val.c_str(), 1) < 0)
+        std::cerr << "Failed to set environment variable " << key << ", errno " << errno << '\n';
 }
 }

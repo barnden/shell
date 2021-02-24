@@ -173,7 +173,7 @@ void Tokenizer::tokenize_input() {
                     case '=':
                         if (!m_force_string) {
                             type = Equal;
-                            override_string = true;
+                            override_string = false;
                         } else pass = true;
                     break;
                     case ';': type = Sequential; break;

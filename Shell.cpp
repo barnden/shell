@@ -400,6 +400,8 @@ void handle$ast(const std::shared_ptr<Expression>& ast, T&& hook) {
         case SequentialIf:
         case Sequential:
             return handle$sequential(ast);
+        case Equal:
+            return command$set_env(ast);
         default:
             std::cerr << "Bad token type passed to handle$ast\n";
             exit(1);
