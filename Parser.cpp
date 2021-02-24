@@ -22,7 +22,9 @@ Parser::Parser(std::vector<Token>& tokens) :
     parse();
 }
 
-std::vector<std::shared_ptr<Expression>> Parser::asts() const { return m_asts; }
+std::vector<std::shared_ptr<Expression>> Parser::asts() const {
+    return m_err ? std::vector<std::shared_ptr<Expression>> {} : m_asts;
+}
 
 std::shared_ptr<Expression> Parser::glue_sticky() {
     auto expr = std::shared_ptr<Expression> {};
@@ -113,6 +115,11 @@ void Parser::parse_current() {
         case Background:
             parse_background();
             break;
+        case String:
+        case StickyRight:
+        case StickyLeft:
+            m_asts.push_back(std::make_shared<Expression>(*m_cur));
+            break;
     }
 }
 
@@ -177,11 +184,30 @@ void Parser::parse_sequential() {
 }
 
 void Parser::parse_equal() {
-    if (m_asts.size() && m_asts.back()->token.type == String) {
-        auto expr = new Expression(*m_cur);
+    if (m_asts.size() &&
+        (
+            m_asts.back()->token.type == String ||
+            m_asts.back()->token.type == StickyRight ||
+            m_asts.back()->token.type == StickyLeft
+        )
+    ) {
+        if (m_next == nullptr ||
+            (
+                m_next->type != String &&
+                m_next->type != StickyRight &&
+                m_next->type != StickyLeft
+            )
+        ) {
+            PARSER_ERR("Syntax error new unexpected token '='.")
+            return;
+        }
+
+        auto expr = std::make_shared<Expression>(*m_cur);
         expr->children.push_back(m_asts.back());
+        expr->children.push_back(std::make_shared<Expression>(*++m_cur));
 
         m_asts.pop_back();
+        m_asts.push_back(expr);
     } else PARSER_ERR("Syntax error near unexpected token '='.")
 }
 
@@ -191,10 +217,8 @@ void Parser::parse() {
     m_cur = &*m_tokens.begin();
 
     while (m_cur < &*m_tokens.end()) {
-        if (m_err) {
-            m_asts = std::vector<std::shared_ptr<Expression>> {};
+        if (m_err)
             return;
-        }
 
         m_next = peek();
 
