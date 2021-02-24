@@ -1,9 +1,10 @@
-#include <string>
 #include <iostream>
+#include <memory>
+#include <string>
 #include <vector>
 
-#include "Tokenizer.h"
 #include "Parser.h"
+#include "Tokenizer.h"
 
 #define PARSER_ERR(msg) { std::cerr << msg << '\n'; m_err = true; }
 
@@ -11,7 +12,7 @@ namespace BShell {
 Expression::Expression() {}
 Expression::Expression(Token token) : token(token) {}
 
-Parser::Parser(std::vector<Token>&tokens) :
+Parser::Parser(std::vector<Token>& tokens) :
     m_tokens(tokens),
     m_cur(),
     m_next(),
@@ -21,10 +22,10 @@ Parser::Parser(std::vector<Token>&tokens) :
     parse();
 }
 
-std::vector<Expression*> Parser::asts() const { return m_asts; }
+std::vector<std::shared_ptr<Expression>> Parser::asts() const { return m_asts; }
 
-Expression* Parser::glue_sticky() {
-    Expression* expr = nullptr;
+std::shared_ptr<Expression> Parser::glue_sticky() {
+    auto expr = std::shared_ptr<Expression> {};
 
     if (m_cur->type == StickyRight &&
         peek() &&
@@ -33,7 +34,7 @@ Expression* Parser::glue_sticky() {
             peek()->type == StickyLeft
         )
     ) {
-        expr = new Expression(Token {
+        expr = std::make_shared<Expression>(Token {
             String,
             m_cur->content + peek()->content
         });
@@ -45,7 +46,7 @@ Expression* Parser::glue_sticky() {
         if (expr)
             expr->token.content += peek()->content;
         else
-            expr = new Expression(Token {
+            expr = std::make_shared<Expression>(Token {
                 String,
                 m_cur->content + peek()->content
             });
@@ -56,7 +57,7 @@ Expression* Parser::glue_sticky() {
     return expr;
 }
 
-void Parser::add_strings(Expression* expr) {
+void Parser::add_strings(const std::shared_ptr<Expression>& expr) {
     while (
         (m_next = peek()) != nullptr &&
         (
@@ -70,17 +71,17 @@ void Parser::add_strings(Expression* expr) {
 
         auto glue = glue_sticky();
 
-        expr->children.push_back(glue ? glue : new Expression(*m_next));
+        expr->children.push_back(glue ? glue : std::make_shared<Expression>(*m_next));
     }
 }
 
 void Parser::parse_background() {
-    Expression* expr = nullptr;
+    auto expr = std::shared_ptr<Expression> {};
 
     if (m_asts.size() && m_asts.back()->token.type == Executable) {
-        expr = new Expression(*m_cur);
+        expr = std::make_shared<Expression>(*m_cur);
 
-        expr->children.push_back(m_asts.back());
+        expr.get()->children.push_back(m_asts.back());
 
         m_asts.pop_back();
         m_asts.push_back(expr);
@@ -91,7 +92,7 @@ void Parser::parse_current() {
     switch (m_cur->type) {
         case Key:
         case Executable: {
-            auto expr = new Expression(*m_cur);
+            auto expr = std::make_shared<Expression>(*m_cur);
 
             add_strings(expr);
             m_asts.push_back(expr);
@@ -127,15 +128,15 @@ void Parser::parse_redirection() {
             return;
         }
 
-        auto expr = new Expression(*m_cur);
-        Expression* exec = nullptr;
+        auto expr = std::make_shared<Expression>(*m_cur);
+        auto exec = std::shared_ptr<Expression> {};
 
         if (m_asts.back()->token.type == RedirectPipe)
             exec = m_asts.back()->children.back();
         else
             exec = m_asts.back();
 
-        expr->children.push_back(new Expression(*++m_cur));
+        expr->children.push_back(std::make_shared<Expression>(*++m_cur));
         exec->children.push_back(expr);
     } else PARSER_ERR("Syntax error near unexpected redirection token.");
 }
@@ -150,7 +151,7 @@ void Parser::parse_sequential() {
             return;
         }
 
-        Expression* expr = nullptr;
+        auto expr = std::shared_ptr<Expression> {};
 
         // Instead of having a multi-level tree for all the pipes
         // flatten the tree into one layer, where children from
@@ -159,7 +160,7 @@ void Parser::parse_sequential() {
         if (m_asts.back()->token.type == type) {
             expr = m_asts.back();
         } else {
-            expr = new Expression(*m_cur);
+            expr = std::make_shared<Expression>(*m_cur);
             expr->children.push_back(m_asts.back());
         }
 
@@ -191,10 +192,7 @@ void Parser::parse() {
 
     while (m_cur < &*m_tokens.end()) {
         if (m_err) {
-            for (auto& ast : m_asts)
-                ast$delete_children(ast);
-
-            m_asts = std::vector<Expression*> {};
+            m_asts = std::vector<std::shared_ptr<Expression>> {};
             return;
         }
 
@@ -210,15 +208,7 @@ Token* Parser::peek() {
     return  &*m_tokens.end() != m_cur + 1 ? m_cur + 1 : nullptr;
 }
 
-void ast$delete_children(Expression* expr){
-    if (expr->children.size())
-        for (auto*child : expr->children)
-            ast$delete_children(child);
-
-    delete expr;
-}
-
-void ast$print(Expression* expr, int depth) {
+void ast$print(std::shared_ptr<Expression> expr, int depth) {
     for (auto i = 0; i < depth; i++)
         std::cout << "    ";
 
@@ -229,7 +219,7 @@ void ast$print(Expression* expr, int depth) {
             ast$print(expr->children[i], depth + 1);
 }
 
-void ast$print(Expression* expr) {
+void ast$print(std::shared_ptr<Expression> expr) {
     ast$print(expr, 0);
 }
 }

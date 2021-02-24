@@ -8,7 +8,7 @@
 #include "Shell.h"
 
 namespace BShell {
-void command$cd(Expression* expr) {
+void command$cd(const std::shared_ptr<Expression>& expr) {
     auto args = std::vector<std::string> {};
     auto argv = std::vector<char*> {};
 
@@ -38,9 +38,10 @@ void command$cd(Expression* expr) {
 
         stat = chdir(path.get());
     } else if (strcmp(dir, "-") == 0) {
-        if (g_prev_wd.size()) {
+        if (g_prev_wd.size())
             stat = chdir(g_prev_wd.c_str());
-        } else std::cerr << "g_prev_wd not set\n";
+        else
+            std::cerr << "g_prev_wd not set\n";
     } else stat = chdir(dir);
 
     // Don't change previous directory on error.

@@ -83,7 +83,7 @@ int main(int argc, int* argv[]) {
             std::cout << "--{Token End}--\n";
             #endif
 
-            for (auto*ast : asts) {
+            for (auto ast : asts) {
                 #if DEBUG_AST
                 std::cout << "--{AST Begin}--\n";
                 BShell::ast$print(ast);
@@ -91,7 +91,6 @@ int main(int argc, int* argv[]) {
                 #endif
 
                 BShell::handle$ast(ast);
-                BShell::ast$delete_children(ast);
             }
         }
 

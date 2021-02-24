@@ -90,7 +90,7 @@ std::string get$pname(pid_t pid) {
     return std::string { std::istreambuf_iterator { proc.rdbuf() }, {} };
 }
 
-std::string get$pname(Expression* expr) {
+std::string get$pname(const std::shared_ptr<Expression>& expr) {
     auto pname = std::string {};
 
     if (expr->token.type != Executable)
@@ -148,8 +148,6 @@ void get$eval(std::string& str, Token token) {
             close(eval_io.fd[0]);
             close(eval_io.fd[1]);
         });
-
-        ast$delete_children(ast);
     }
 
     write(eval_io.fd[1], NULL, 1);
@@ -187,7 +185,7 @@ void handle$argv_strings(std::vector<std::string>& argv, bool& sticky, Token tok
     argv.push_back(str);
 }
 
-void handle$keyword(Expression* expr) {
+void handle$keyword(const std::shared_ptr<Expression>& expr) {
     auto kw = expr->token.content;
     auto index = std::distance(g_keywords.find(kw), g_keywords.end());
 
@@ -203,7 +201,7 @@ void handle$keyword(Expression* expr) {
     }
 }
 
-void handle$redirect_in(Expression* redirect_in) {
+void handle$redirect_in(const std::shared_ptr<Expression>& redirect_in) {
     if (redirect_in == nullptr) return;
 
     auto filename = std::string {};
@@ -228,7 +226,7 @@ void handle$redirect_in(Expression* redirect_in) {
     close(file);
 }
 
-void handle$redirect_out(Expression* redirect_out) {
+void handle$redirect_out(const std::shared_ptr<Expression>& redirect_out) {
     if (redirect_out == nullptr) return;
 
     auto filename = std::string {};
@@ -253,7 +251,7 @@ void handle$redirect_out(Expression* redirect_out) {
     close(file);
 }
 
-std::vector<std::string> handle$argv(Expression* expr) {
+std::vector<std::string> handle$argv(const std::shared_ptr<Expression>& expr) {
     auto argv = std::vector<std::string> { expr->token.content };
     auto sticky = false;
 
@@ -278,7 +276,7 @@ std::vector<std::string> handle$argv(Expression* expr) {
 }
 
 template<typename T>
-Process execute(Expression* expr, T&& child_hook) {
+Process execute(const std::shared_ptr<Expression>& expr, T&& child_hook) {
     auto pid = fork();
 
     if (pid < 0) {
@@ -309,13 +307,13 @@ Process execute(Expression* expr, T&& child_hook) {
 }
 
 template<typename T>
-void handle$executable(Expression* expr, T&& hook) {
+void handle$executable(const std::shared_ptr<Expression>& expr, T&& hook) {
     auto proc = execute(expr, hook);
 
     waitpid(proc.pid, &g_exit_fg, 0);
 }
 
-void handle$background(Expression* expr) {
+void handle$background(const std::shared_ptr<Expression>& expr) {
     auto proc = execute(expr->children[0], [=]{});
 
     std::cout << '[' << g_processes.size() + 1 << "] " << proc.pid << '\n';
@@ -324,7 +322,7 @@ void handle$background(Expression* expr) {
     g_processes.push_back(Process { proc.pid, proc.name });
 }
 
-void handle$sequential(Expression* expr) {
+void handle$sequential(const std::shared_ptr<Expression>& expr) {
     for (auto& child : expr->children) {
         auto proc = Process {};
 
@@ -338,7 +336,7 @@ void handle$sequential(Expression* expr) {
 }
 
 template<typename T>
-void handle$pipe(Expression* expr, T&& last_hook) {
+void handle$pipe(const std::shared_ptr<Expression>& expr, T&& last_hook) {
     auto last_io = Pipe {};
 
     for (auto& child : expr->children) {
@@ -389,7 +387,7 @@ void handle$pipe(Expression* expr, T&& last_hook) {
 }
 
 template<typename T>
-void handle$ast(Expression* ast, T&& hook) {
+void handle$ast(const std::shared_ptr<Expression>& ast, T&& hook) {
     switch (ast->token.type) {
         case Key:
             return handle$keyword(ast);
@@ -408,7 +406,7 @@ void handle$ast(Expression* ast, T&& hook) {
     }
 }
 
-void handle$ast(Expression* ast) {
+void handle$ast(const std::shared_ptr<Expression>& ast) {
     handle$ast(ast, [=](){});
 }
 
