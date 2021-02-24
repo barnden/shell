@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -26,7 +27,7 @@ std::string get$cwd() {
     // From getcwd(3) it says get_current_dir_name() will malloc a
     // string large enough to fit the current working dir.
     // While getcwd() requires us to create our own string buffer.
-    auto*buf = get_current_dir_name();
+    auto* buf = get_current_dir_name();
     auto cwd = std::string(buf);
 
     free(buf);
@@ -38,7 +39,7 @@ std::string get$home() {
     // Use getenv "HOME" otherwise, fallback to getpwuid(3)
     // and getuid(3) to get the user's home directory.
 
-    auto*buf = getenv("HOME");
+    auto* buf = getenv("HOME");
 
     if (buf == nullptr)
         buf = getpwuid(getuid())->pw_dir;
@@ -51,23 +52,18 @@ std::string get$username() {
     // Suggests that we use getenv to get "LOGNAME", otherwise
     // fallback to getlogin(), then getlogin_r()
 
-    auto*buf = getenv("LOGNAME");
+    auto* buf = getenv("LOGNAME");
     auto username = std::string {};
-    auto del = false;
 
     if (buf == nullptr && (buf = getlogin()) == nullptr){
         // From useradd(8), usernames can be at most 32 chars long.
-        buf = new char [32];
+        auto uptr = std::make_unique<char[]>(32);
+        buf = uptr.get();
 
         getlogin_r(buf, 32);
-
-        del = true;
     }
 
     username = std::string(buf);
-
-    if (del)
-        delete[] buf;
 
     return username;
 }
@@ -79,11 +75,10 @@ std::string get$hostname() {
     if (buf != nullptr) hostname = std::string(buf);
     else {
         // hostname(7) states that the maximum hostname is 253 chars.
-        buf = new char [253];
-        gethostname(buf, 253);
+        auto uptr = std::make_unique<char[]>(253);
+        gethostname(uptr.get(), 253);
 
-        hostname = std::string(buf);
-        delete[] buf;
+        hostname = std::string { *uptr.get() };
     }
 
     return hostname;
@@ -160,19 +155,16 @@ void get$eval(std::string& str, Token token) {
     write(eval_io.fd[1], NULL, 1);
     close(eval_io.fd[1]);
 
-    auto* buf = new char [BUFSIZ];
+    auto buf = std::make_unique<char[]>(BUFSIZ);
     auto fmem = fdopen(eval_io.fd[0], "r");
 
-    while (fgets(buf, BUFSIZ, fmem))
-        str += buf;
-
-    delete[] buf;
+    while (fgets(buf.get(), BUFSIZ, fmem))
+        str += std::string { buf.get() };
 
     close(eval_io.fd[0]);
 }
 
-void handle$argv_strings(std::vector<char*>& argv, bool& sticky, Token token) {
-    char* strbuf = nullptr;
+void handle$argv_strings(std::vector<std::string>& argv, bool& sticky, Token token) {
     auto str = std::string {};
 
     if (token.type == Eval)
@@ -181,7 +173,7 @@ void handle$argv_strings(std::vector<char*>& argv, bool& sticky, Token token) {
         str = token.content;
 
     if (sticky || token.type == StickyLeft) {
-        str = std::string { argv.back() } + str;
+        str += argv.back();
 
         argv.pop_back();
     }
@@ -192,13 +184,7 @@ void handle$argv_strings(std::vector<char*>& argv, bool& sticky, Token token) {
     // Remove unprintable control characters like SOH, STX, ETX, etc.
     str.erase(std::remove_if(str.begin(), str.end(), [=](int c) { return !std::isprint(c); } ), str.end());
 
-    // We can't just add the const_cast of str.c_str into the argv vector
-    // due to issues with the lifetime of the string objects.
-    // Therefore, copy into a strbuf on the heap that persists until exec.
-    strbuf = new char [str.size() + 1];
-    strcpy(strbuf, str.c_str());
-
-    argv.push_back(strbuf);
+    argv.push_back(str);
 }
 
 void handle$keyword(Expression* expr) {
@@ -267,8 +253,8 @@ void handle$redirect_out(Expression* redirect_out) {
     close(file);
 }
 
-std::vector<char*> handle$argv(Expression* expr) {
-    auto argv = std::vector<char*>{ const_cast<char*>(expr->token.content.c_str()) };
+std::vector<std::string> handle$argv(Expression* expr) {
+    auto argv = std::vector<std::string> { expr->token.content };
     auto sticky = false;
 
     for (auto& child : expr->children) {
@@ -288,8 +274,6 @@ std::vector<char*> handle$argv(Expression* expr) {
         }
     }
 
-    argv.push_back(NULL);
-
     return argv;
 }
 
@@ -302,7 +286,16 @@ Process execute(Expression* expr, T&& child_hook) {
 
         exit(1);
     } else if (!pid) {
-        auto argv = handle$argv(expr);
+        auto args = handle$argv(expr);
+        auto argv = std::vector<char*> {};
+
+        std::transform(
+            args.begin(), args.end(),
+            std::back_inserter(argv),
+            [](const std::string& str) { return const_cast<char*>(str.c_str()); }
+        );
+
+        argv.push_back(NULL);
 
         child_hook();
 
