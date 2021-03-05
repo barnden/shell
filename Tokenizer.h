@@ -20,6 +20,7 @@ enum TokenType : uint8_t {
     Eval,           // eval string (enclosed in backticks or "$()")
     StickyRight,    // sticky string (right), makes a string with next token
     StickyLeft,     // sticky string (left), makes a string with previous token
+    WhiteSpace,     // whitespace
 };
 
 struct Token {
@@ -29,20 +30,19 @@ struct Token {
 
 class Tokenizer {
 public:
-    Tokenizer(const char*);
+    Tokenizer(std::string, bool = false);
 
     std::vector<Token> tokens() const;
 private:
     void tokenize_input();
     void add_token(Token);
-    bool add_quote(int, int);
+    bool add_quote(int, int, std::string);
     char enquote() const;
     void add_string_buf();
 
-    const char* m_input;
-    std::string m_string_buf;
+    std::string m_input, m_string_buf;
     int m_quotes[4];
-    bool m_gobble, m_force_string, m_make_sticky_l, m_make_sticky_r;
+    bool m_gobble, m_force_string, m_make_sticky_l, m_make_sticky_r, m_preserve_whitespace;
     std::vector<Token> m_tokens;
 };
 
