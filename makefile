@@ -2,7 +2,7 @@
 CXX_FLAGS=-g -w -fsanitize=undefined,address -std=c++20 -pipe
 
 all: Tokenizer.o Parser.o PromptString.o Commands.o Shell.o Terminal.o main.o
-	g++ $(CXX_FLAGS) -o shell Tokenizer.o Parser.o Terminal.o Commands.o Shell.o PromptString.o main.o -lreadline
+	g++ $(CXX_FLAGS) -o shell Tokenizer.o Parser.o Terminal.o Commands.o Shell.o PromptString.o main.o
 
 main.o: main.cpp
 	g++ $(CXX_FLAGS) -c main.cpp
