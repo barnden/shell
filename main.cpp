@@ -1,11 +1,11 @@
+#include <cstdlib>
 #include <iostream>
 // #include <format>
 
-#include <readline/readline.h>
-#include <readline/history.h>
 #include <signal.h>
 #include <stdio.h>
 #include <sys/wait.h>
+#include <termios.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -37,43 +37,30 @@ void print$bgproc() {
     }
 }
 
-// As readline(3) man page only covers user usage of GNU readline
-// the programmer documentation is found below.
-// https://tiswww.case.edu/php/chet/readline/readline.html#IDX338
-
 int main(int argc, int* argv[]) {
-    // I can't find any resources on whether this is actually "safe", as cannot use the
-    // GNU readline library in the BShell::handler$posix_sig(int) function, as readline
-    // uses malloc for most functions that display to the terminal.
-    rl_signal_event_hook = reinterpret_cast<rl_hook_func_t*>(BShell::handler$readline_sig);
-
-    // Ignore SIGINT from CTRL+C, only exit on CTRL+D
-    if (signal(SIGINT, BShell::handler$posix_sig) == SIG_ERR) {
-        // Pass the handler$posix_sig(int) instead of SIG_IGN so the
-        // rl_signal_event_hook function gets called.
-        std::cerr << "Could not bind signal handler handler$posix_sig() to SIGINT.\n";
+    if (signal(SIGINT, BShell::handle$sigint) == SIG_ERR) {
+        std::cerr << "Failed to bind SIGINT.\n";
         exit(1);
     }
-
-    // Use the GNU history library to store previous commands.
-    using_history();
-    auto * hstate = history_get_history_state();
-    auto ** hlist = history_list();
+    std::atexit(BShell::terminal$restore);
 
     // Continually prompt the user for input
     while (true) {
-        auto* input = readline(BShell::get$PS1().c_str());
+        BShell::terminal$control();
+        auto input = BShell::get$input(BShell::get$PS1());
+        std::cout << "\x1b[2K\x1b[1G";
+        BShell::terminal$restore();
 
-        // CTRL+D causes terminal to send EOF which GNU readline interprets as NULL
-        if (input == NULL) break;
+        // CTRL+D causes terminal to send EOF, which is interpreted as \x1b[EOF
+        if (input == "\x1b[EOF") break;
 
         print$bgproc();
         BShell::erase_dead_children();
 
-        if (strlen(input)) {
-            add_history(input);
+        if (input.size()) {
+            BShell::g_history.push_back(input);
 
-            auto tokens = BShell::Tokenizer(const_cast<const char*>(input)).tokens();
+            auto tokens = BShell::Tokenizer(input).tokens();
             auto asts = BShell::Parser(tokens).asts();
 
             #if DEBUG_TOKEN
@@ -93,18 +80,9 @@ int main(int argc, int* argv[]) {
                 BShell::handle$ast(ast);
             }
         }
-
-        free(input);
     }
 
-    // Presumably there is a way to serialize the HISTORY_STATE struct,
-    // and store it in some file, then load that file the next time the
-    // shell is launched and initialize the history with the previous
-    // session's commands a la bash.
-    free(hstate);
-    free(hlist);
-
-    std::cout << "brandon shell exited\n";
+    std::cout << "\nbrandon shell exited\n";
 
     return 0;
 }
