@@ -1,9 +1,16 @@
 #pragma once
 
-namespace BShell {
-void rl$reset();
-void handler$readline_sig(void);
-void handler$posix_sig(int);
+#include <vector>
 
-extern volatile bool g_fsigint;
+#include <termios.h>
+
+namespace BShell {
+std::string get$input(std::string);
+void terminal$control();
+void terminal$restore();
+void handle$sigint(int);
+
+extern termios g_term;
+extern termios g_oterm;
+extern std::vector<std::string> g_history;
 }
