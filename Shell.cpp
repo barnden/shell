@@ -53,32 +53,37 @@ std::string get$username() {
     // fallback to getlogin(), then getlogin_r()
 
     auto* buf = getenv("LOGNAME");
-    auto username = std::string {};
 
     if (buf == nullptr && (buf = getlogin()) == nullptr){
         // From useradd(8), usernames can be at most 32 chars long.
         auto uptr = std::make_unique<char[]>(32);
+
         buf = uptr.get();
 
-        getlogin_r(buf, 32);
+        if (getlogin_r(buf, 32) != 0) {
+            std::cerr << "getlogin_r()\n";
+            exit(1);
+        }
     }
 
-    username = std::string(buf);
-
-    return username;
+    return std::string { buf };
 }
 
 std::string get$hostname() {
-    auto buf = getenv("HOSTNAME");
+    auto* buf = getenv("HOSTNAME");
     auto hostname = std::string {};
 
-    if (buf != nullptr) hostname = std::string(buf);
+    if (buf != nullptr) hostname = std::string { buf };
     else {
         // hostname(7) states that the maximum hostname is 253 chars.
         auto uptr = std::make_unique<char[]>(253);
-        gethostname(uptr.get(), 253);
 
-        hostname = std::string { *uptr.get() };
+        if (gethostname(uptr.get(), 253) != 0) {
+            std::cerr << "gethostname()\n";
+            exit(1);
+        }
+
+        hostname = std::string { uptr.get() };
     }
 
     return hostname;
@@ -404,7 +409,6 @@ void handle$ast(const std::shared_ptr<Expression>& ast, T&& hook) {
             return command$set_env(ast);
         default:
             std::cerr << "Bad token type passed to handle$ast\n";
-            exit(1);
     }
 }
 
