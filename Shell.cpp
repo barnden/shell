@@ -176,8 +176,9 @@ void handle$argv_strings(std::vector<std::string>& argv, bool& sticky, Token tok
         str = token.content;
 
     if (sticky || token.type == StickyLeft) {
-        str += argv.back();
+        sticky = false;
 
+        str = argv.back() + str;
         argv.pop_back();
     }
 
