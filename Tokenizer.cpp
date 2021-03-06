@@ -50,7 +50,8 @@ bool Tokenizer::add_quote(int index, int mask, std::string quote = "'") {
 
     if (m_quotes[index] && !(m_quotes[index] % 2)) {
         if (m_preserve_whitespace)
-            m_tokens.push_back(Token { WhiteSpace, quote });
+            // FIXME: This is very hackish
+            m_tokens.push_back(Token { WhiteSpace, index == 3 ? "$(" : quote });
 
         add_token(Token { index <= 1 ? String : Eval,
             (m_string_buf.size() >= 1) ? m_string_buf.substr(1) : m_string_buf
