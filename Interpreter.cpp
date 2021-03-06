@@ -414,6 +414,12 @@ void handle$ast(const std::shared_ptr<Expression>& ast, T&& hook) {
 }
 
 void handle$ast(const std::shared_ptr<Expression>& ast) {
+    #if DEBUG_AST
+    std::cout << "--{AST Begin}--\n";
+    BShell::ast$print(ast);
+    std::cout << "--{AST End}--\n";
+    #endif
+
     handle$ast(ast, [=](){});
 }
 

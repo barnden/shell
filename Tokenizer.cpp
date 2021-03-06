@@ -34,6 +34,17 @@ Tokenizer::Tokenizer(std::string input, bool preserve_whitespace) :
 }
 
 std::vector<Token> Tokenizer::tokens() const {
+    #if DEBUG_TOKEN
+    if (!m_preserve_whitespace) {
+        std::cout << "--{Token Begin}--\n";
+
+        for (auto& t : m_tokens)
+            std::cout << t << '\n';
+
+        std::cout << "--{Token End}--\n";
+    }
+    #endif
+
     return m_tokens;
 }
 
