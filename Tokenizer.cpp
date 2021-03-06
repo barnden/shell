@@ -5,7 +5,7 @@
 
 #include <string.h>
 
-#include "Shell.h"
+#include "Interpreter.h"
 #include "Tokenizer.h"
 
 const char* TokenNames[] = {

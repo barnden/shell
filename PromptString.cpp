@@ -1,7 +1,7 @@
 #include <string>
 
 #include "PromptString.h"
-#include "Shell.h"
+#include "Interpreter.h"
 
 using namespace BShell;
 

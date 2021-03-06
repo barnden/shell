@@ -6,7 +6,7 @@
 
 #include "Commands.h"
 #include "Parser.h"
-#include "Shell.h"
+#include "Interpreter.h"
 
 namespace BShell {
 void command$cd(const std::shared_ptr<Expression>& expr) {
