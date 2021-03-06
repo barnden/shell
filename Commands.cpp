@@ -9,6 +9,8 @@
 #include "Interpreter.h"
 
 namespace BShell {
+std::string g_prev_wd = "";
+
 void command$cd(const std::shared_ptr<Expression>& expr) {
     auto args = std::vector<std::string> {};
     auto argv = std::vector<char*> {};
