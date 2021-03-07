@@ -10,7 +10,7 @@
 #include <unistd.h>
 
 #include "PromptString.h"
-#include "Interpreter.h"
+#include "System.h"
 #include "Terminal.h"
 #include "Tokenizer.h"
 
