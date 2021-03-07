@@ -16,6 +16,7 @@ std::string get$cwd() {
     // From getcwd(3) it says get_current_dir_name() will malloc a
     // string large enough to fit the current working dir.
     // While getcwd() requires us to create our own string buffer.
+
     auto* buf = get_current_dir_name();
     auto cwd = std::string(buf);
 
@@ -33,7 +34,7 @@ std::string get$home() {
     if (buf == nullptr)
         buf = getpwuid(getuid())->pw_dir;
 
-    return std::string(buf);
+    return std::string { buf };
 }
 
 std::string get$username() {
@@ -42,11 +43,11 @@ std::string get$username() {
     // fallback to getlogin(), then getlogin_r()
 
     auto* buf = getenv("LOGNAME");
+    auto uptr = std::unique_ptr<char[]>{};
 
     if (buf == nullptr && (buf = getlogin()) == nullptr){
         // From useradd(8), usernames can be at most 32 chars long.
-        auto uptr = std::make_unique<char[]>(32);
-
+        uptr = std::make_unique<char[]>(32);
         buf = uptr.get();
 
         if (getlogin_r(buf, 32) != 0) {
@@ -60,22 +61,20 @@ std::string get$username() {
 
 std::string get$hostname() {
     auto* buf = getenv("HOSTNAME");
-    auto hostname = std::string {};
+    auto uptr = std::unique_ptr<char[]>{};
 
-    if (buf != nullptr) hostname = std::string { buf };
-    else {
+    if (buf == nullptr) {
         // hostname(7) states that the maximum hostname is 253 chars.
-        auto uptr = std::make_unique<char[]>(253);
+        uptr = std::make_unique<char[]>(253);
+        buf = uptr.get();
 
-        if (gethostname(uptr.get(), 253) != 0) {
+        if (gethostname(buf, 253) != 0) {
             std::cerr << "gethostname()\n";
             exit(1);
         }
-
-        hostname = std::string { uptr.get() };
     }
 
-    return hostname;
+    return std::string { buf };
 }
 
 std::string get$pname(pid_t pid) {
