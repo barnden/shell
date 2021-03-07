@@ -83,11 +83,47 @@ void history$next(int* cursor, bool& lup, const std::string& prompt, std::string
     line$reprint(prompt, line_buf, cursor[0] + prompt.size());
 }
 
+void terminal$autocomplete(int* cursor, const std::string& prompt, std::string& line_buf) {
+    auto last = line_buf;
+    auto ac_index = 0;
+    std::vector<std::filesystem::path> files = {std::filesystem::directory_iterator(get$cwd()), {}};
+    std::vector<std::string> filenames;
+
+    for (auto& f : files) {
+        auto fname = f.string();
+        auto find = fname.find_last_of('/');
+
+        if (find != std::string::npos)
+            fname = fname.substr(find + 1);
+
+        filenames.push_back(fname);
+    }
+
+    if ((ac_index = line_buf.find_last_of(' ')) != std::string::npos)
+        last = line_buf.substr(ac_index + 1);
+
+    filenames.erase(
+        std::remove_if(filenames.begin(), filenames.end(),
+            [=](std::string str) {
+                return str.size() < last.size() || str.substr(0, last.size()) != last;
+            }
+        ), filenames.end()
+    );
+
+    if (filenames.size()) {
+        line_buf += filenames[0].substr(last.size());
+        cursor[0] = line_buf.size();
+        line$reprint(prompt, line_buf, cursor[0] + prompt.size());
+    }
+}
+
 std::string get$input(std::string prompt) {
     auto c = char {};
     auto line_buf = std::string {};
     auto lup = false;
     int cursor[2] = {0, 0};
+
+    terminal$control();
 
     // Print out prompt before starting loop
     std::cout << "\x1b[2K\x1b[1G" << prompt;
@@ -96,14 +132,8 @@ std::string get$input(std::string prompt) {
         // termios::c_cc is runtime; no switches ;(
         if (c == g_term.c_cc[VEOF]) {
             // CTRL+D (EOF to STDIN)
-            std::cout << "^D\x1b[1G";
+            std::cout << "^D\x1b[1G\nbrandon shell exited\n\x1b[2K\x1b[1G";
             return "\x1b[EOF";
-        }
-        
-        if (c == '\r') {
-            std::cout << '\n';
-
-            return line_buf;
         }
 
         if (c == g_term.c_cc[VINTR]) {
@@ -126,40 +156,19 @@ std::string get$input(std::string prompt) {
             continue;
         }
 
+        if (c == '\r') {
+            std::cout << "\n\x1b[2K\x1b[1G";
+            terminal$restore();
+
+            return line_buf;
+        }
+
         if (c == '\t') {
-            auto last = line_buf;
-            auto ac_index = 0;
-            std::vector<std::filesystem::path> files = {std::filesystem::directory_iterator(get$cwd()), {}};
-            std::vector<std::string> filenames;
-
-            for (auto& f : files) {
-                auto fname = f.string();
-                auto find = fname.find_last_of('/');
-
-                if (find != std::string::npos)
-                    fname = fname.substr(find + 1);
-
-                filenames.push_back(fname);
-            }
-
-            if ((ac_index = line_buf.find_last_of(' ')) != std::string::npos)
-                last = line_buf.substr(ac_index + 1);
-
-            filenames.erase(
-                std::remove_if(filenames.begin(), filenames.end(),
-                    [=](std::string str) {
-                        return str.size() < last.size() || str.substr(0, last.size()) != last;
-                    }
-                ), filenames.end()
-            );
-
-            if (filenames.size()) {
-                line_buf += filenames[0].substr(last.size());
-                cursor[0] = line_buf.size();
-                line$reprint(prompt, line_buf, cursor[0] + prompt.size());
-            }
+            terminal$autocomplete(cursor, prompt, line_buf);
             continue;
-        } else if (c == '\x1b') {
+        }
+
+        if (c == '\x1b') {
             // Special characters
             char inp[4];
             auto count = 0;
@@ -217,14 +226,12 @@ std::string get$input(std::string prompt) {
             continue;
         }
 
+        line_buf.insert(cursor[0], 1, c);
+
+        cursor[0]++;
         cursor[1] = 0;
 
-        if (cursor[0] < line_buf.size())
-            line_buf.insert(cursor[0], 1, c);
-        else
-            line_buf += c;
-
-        line$reprint(prompt, line_buf, ++cursor[0] + prompt.size());
+        line$reprint(prompt, line_buf, cursor[0] + prompt.size());
     }
 }
 
