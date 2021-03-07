@@ -30,14 +30,12 @@ int main(int argc, int* argv[]) {
         std::cerr << "Failed to bind SIGINT.\n";
         exit(1);
     }
+
     std::atexit(BShell::terminal$restore);
 
     // Continually prompt the user for input
     while (true) {
-        BShell::terminal$control();
         auto input = BShell::get$input(BShell::get$PS1());
-        std::cout << "\x1b[2K\x1b[1G";
-        BShell::terminal$restore();
 
         // CTRL+D causes terminal to send EOF, which is interpreted as \x1b[EOF
         if (input == "\x1b[EOF") break;
@@ -55,8 +53,6 @@ int main(int argc, int* argv[]) {
                 BShell::handle$ast(ast);
         }
     }
-
-    std::cout << "\nbrandon shell exited\n";
 
     return 0;
 }
