@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Parser.h"
+
 namespace BShell {
 std::string get$cwd();
 std::string get$home();

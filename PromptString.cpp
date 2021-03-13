@@ -2,6 +2,7 @@
 
 #include "PromptString.h"
 #include "Interpreter.h"
+#include "System.h"
 
 using namespace BShell;
 

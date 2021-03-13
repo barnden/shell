@@ -7,6 +7,7 @@
 #include "Commands.h"
 #include "Parser.h"
 #include "Interpreter.h"
+#include "System.h"
 
 namespace BShell {
 std::string g_prev_wd = "";

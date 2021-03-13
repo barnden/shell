@@ -7,6 +7,7 @@
 
 #include "Interpreter.h"
 #include "Tokenizer.h"
+#include "System.h"
 
 const char* TokenNames[] = {
     "NULL", "STRING", "EQUAL", "EXECUTABLE", "BACKGROUND", "SEQUENTIAL",
