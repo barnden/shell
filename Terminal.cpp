@@ -15,13 +15,10 @@
 #include "Tokenizer.h"
 
 namespace BShell {
+namespace fs = std::filesystem;
+
 termios g_term, g_oterm;
 std::vector<std::string> g_history = std::vector<std::string> {};
-
-void handle$sigint(int) {
-    // We do not want the shell to exit on SIGINT
-    // but we also do not want to SIG_IGN SIGINT.
-}
 
 std::vector<std::string> g_token_colors = {
     "\x1b[0m",  // NullToken
@@ -40,6 +37,11 @@ std::vector<std::string> g_token_colors = {
     "\x1b[0m",  // StickyLeft
     "\x1b[0m",  // WhiteSpace
 };
+
+void handle$sigint(int) {
+    // We do not want the shell to exit on SIGINT
+    // but we also do not want to SIG_IGN SIGINT.
+}
 
 std::string line$color(std::string input) {
     auto str = std::string {};
@@ -85,22 +87,21 @@ void history$next(int* cursor, bool& lup, const std::string& prompt, std::string
 
 void terminal$autocomplete(int* cursor, const std::string& prompt, std::string& line_buf) {
     auto last = line_buf;
-    auto ac_index = 0;
-    std::vector<std::filesystem::path> files = {std::filesystem::directory_iterator(get$cwd()), {}};
-    std::vector<std::string> filenames;
+    auto find = size_t {};
+    auto files = std::vector<fs::path> { fs::directory_iterator(get$cwd()), {} };
+    auto filenames = std::vector<std::string> {};
 
     for (auto& f : files) {
-        auto fname = f.string();
-        auto find = fname.find_last_of('/');
+        auto path = f.string();
 
-        if (find != std::string::npos)
-            fname = fname.substr(find + 1);
+        if ((find = path.find_last_of('/')) != std::string::npos)
+            path = path.substr(find + 1);
 
-        filenames.push_back(fname);
+        filenames.push_back(path);
     }
 
-    if ((ac_index = line_buf.find_last_of(' ')) != std::string::npos)
-        last = line_buf.substr(ac_index + 1);
+    if ((find = line_buf.find_last_of(' ')) != std::string::npos)
+        last = line_buf.substr(find + 1);
 
     filenames.erase(
         std::remove_if(filenames.begin(), filenames.end(),
@@ -206,8 +207,7 @@ std::string get$input(std::string prompt) {
                         cursor[1] += 5;
                 } else if (strcmp(inp, "[6~") == 0) {
                     // PGDN
-                    if (cursor[1] >= 5)
-                        cursor[1] -= 5;
+                    history$prev(cursor, lup, prompt, line_buf);
                 } else if (strcmp(inp, "[H") == 0) {
                     // HOME
                     if (cursor[0])
