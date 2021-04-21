@@ -5,14 +5,14 @@
 #include <unistd.h>
 
 #include "Commands.h"
-#include "Parser.h"
 #include "Interpreter.h"
+#include "Parser.h"
 #include "System.h"
 
 namespace BShell {
 std::string g_prev_wd = "";
 
-void command$cd(const std::shared_ptr<Expression>& expr) {
+void command$cd(std::shared_ptr<Expression> const& expr) {
     auto args = std::vector<std::string> {};
     auto argv = std::vector<char*> {};
 
@@ -24,16 +24,15 @@ void command$cd(const std::shared_ptr<Expression>& expr) {
     std::transform(
         args.begin(), args.end(),
         std::back_inserter(argv),
-        [](const std::string& str) { return const_cast<char*>(str.c_str()); }
-    );
+        [](std::string const& str) { return const_cast<char*>(str.c_str()); });
 
     auto* dir = argv.size() ? argv[0] : nullptr;
     auto cwd = get$cwd();
     auto stat = 0;
 
-    if (!dir)
+    if (!dir) {
         stat = chdir(get$home().c_str());
-    else if (dir[0] == '~') {
+    } else if (dir[0] == '~') {
         auto home = get$home();
         auto path = std::make_unique<char>(strlen(dir) + home.size());
 
@@ -46,16 +45,18 @@ void command$cd(const std::shared_ptr<Expression>& expr) {
             stat = chdir(g_prev_wd.c_str());
         else
             std::cerr << "g_prev_wd not set\n";
-    } else stat = chdir(dir);
+    } else
+        stat = chdir(dir);
 
     // Don't change previous directory on error.
-    if (stat < 0)
+    if (stat < 0) {
         std::cerr << "Failed to change directory\n";
-    else
+    } else {
         g_prev_wd = cwd;
+    }
 }
 
-void command$set_env(const std::shared_ptr<Expression>& expr) {
+void command$set_env(std::shared_ptr<Expression> const& expr) {
     if (expr->children.size() < 2) {
         std::cerr << "Syntax error '='.\n";
         return;

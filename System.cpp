@@ -43,9 +43,9 @@ std::string get$username() {
     // fallback to getlogin(), then getlogin_r()
 
     auto* buf = getenv("LOGNAME");
-    auto uptr = std::unique_ptr<char[]>{};
+    auto uptr = std::unique_ptr<char[]> {};
 
-    if (buf == nullptr && (buf = getlogin()) == nullptr){
+    if (buf == nullptr && (buf = getlogin()) == nullptr) {
         // From useradd(8), usernames can be at most 32 chars long.
         uptr = std::make_unique<char[]>(32);
         buf = uptr.get();
@@ -61,7 +61,7 @@ std::string get$username() {
 
 std::string get$hostname() {
     auto* buf = getenv("HOSTNAME");
-    auto uptr = std::unique_ptr<char[]>{};
+    auto uptr = std::unique_ptr<char[]> {};
 
     if (buf == nullptr) {
         // hostname(7) states that the maximum hostname is 253 chars.
@@ -83,7 +83,7 @@ std::string get$pname(pid_t pid) {
     return std::string { std::istreambuf_iterator { proc.rdbuf() }, {} };
 }
 
-std::string get$pname(const std::shared_ptr<Expression>& expr) {
+std::string get$pname(std::shared_ptr<Expression> const& expr) {
     auto pname = std::string {};
 
     if (expr->token.type != Executable)
@@ -92,7 +92,7 @@ std::string get$pname(const std::shared_ptr<Expression>& expr) {
     pname = expr->token.content;
 
     if (expr->children.size())
-        for (const auto& c : expr->children)
+        for (auto const& c : expr->children)
             pname += ' ' + c->token.content;
 
     return pname;

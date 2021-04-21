@@ -4,24 +4,25 @@
 
 #include <signal.h>
 #include <stdio.h>
+#include <sys/types.h>
 #include <sys/wait.h>
 #include <termios.h>
-#include <sys/types.h>
 #include <unistd.h>
 
-#include "Terminal.h"
 #include "Interpreter.h"
 #include "Parser.h"
 #include "PromptString.h"
+#include "Terminal.h"
 
 void print$bgproc() {
-    for (auto&proc : BShell::g_processes) {
-        if (waitpid(proc.pid, &BShell::g_exit_bg, WNOHANG) == 0) continue;
+    for (auto& proc : BShell::g_processes) {
+        if (waitpid(proc.pid, &BShell::g_exit_bg, WNOHANG) == 0)
+            continue;
 
         std::cout
-        << '[' << (&proc - &*BShell::g_processes.begin() + 1) << "] Done "
-        << proc.name
-        << '\n';
+            << '[' << (&proc - &*BShell::g_processes.begin() + 1) << "] Done "
+            << proc.name
+            << '\n';
     }
 }
 
@@ -38,7 +39,8 @@ int main(int argc, int* argv[]) {
         auto input = BShell::get$input(BShell::get$PS1());
 
         // CTRL+D causes terminal to send EOF, which is interpreted as \x1b[EOF
-        if (input == "\x1b[EOF") break;
+        if (input == "\x1b[EOF")
+            break;
 
         print$bgproc();
         BShell::erase_dead_children();
@@ -47,7 +49,7 @@ int main(int argc, int* argv[]) {
             BShell::g_history.push_back(input);
 
             auto tokens = BShell::Tokenizer(input).tokens();
-            auto asts = BShell::Parser(tokens).asts();
+            auto asts = BShell::Parser(std::move(tokens)).asts();
 
             for (auto ast : asts)
                 BShell::handle$ast(ast);

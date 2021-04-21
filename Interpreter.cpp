@@ -22,10 +22,10 @@ namespace BShell {
 std::vector<Process> g_processes;
 int g_exit_fg = 0, g_exit_bg = 0;
 
-void get$eval(std::string& str, Token token) {
+void get$eval(std::string& str, Token const& token) {
     // Recursively tokenize and parse eval string until we get something
     auto tokens = Tokenizer(token.content.c_str()).tokens();
-    auto asts = Parser(tokens).asts();
+    auto asts = Parser(std::move(tokens)).asts();
     auto eval_io = Pipe {};
 
     if (pipe(eval_io.fd) < 0) {
@@ -33,8 +33,8 @@ void get$eval(std::string& str, Token token) {
         exit(1);
     }
 
-    for (auto& ast : asts){
-        handle$ast(ast, [&]{
+    for (auto const& ast : asts) {
+        handle$ast(ast, [&] {
             dup2(eval_io.fd[1], STDOUT_FILENO);
             std::cout.flush();
 
@@ -55,7 +55,7 @@ void get$eval(std::string& str, Token token) {
     close(eval_io.fd[0]);
 }
 
-void handle$argv_strings(std::vector<std::string>& argv, bool& sticky, Token token) {
+void handle$argv_strings(std::vector<std::string>& argv, bool& sticky, Token const& token) {
     auto str = std::string {};
 
     if (token.type == Eval)
@@ -63,80 +63,56 @@ void handle$argv_strings(std::vector<std::string>& argv, bool& sticky, Token tok
     else
         str = token.content;
 
-    if (sticky || token.type == StickyLeft) {
+    if (sticky || token.type & StickyLeft) {
         sticky = false;
 
         str = argv.back() + str;
         argv.pop_back();
     }
 
-    if (token.type == StickyRight)
+    if (token.type & StickyRight)
         sticky = true;
 
     // Remove unprintable control characters like SOH, STX, ETX, etc.
-    str.erase(std::remove_if(str.begin(), str.end(), [=](int c) { return !std::isprint(c); } ), str.end());
+    str.erase(std::remove_if(str.begin(), str.end(), [=](int c) { return !std::isprint(c); }), str.end());
 
     argv.push_back(str);
 }
 
-void handle$keyword(const std::shared_ptr<Expression>& expr) {
+void handle$keyword(std::shared_ptr<Expression> const& expr) {
     auto kw = expr->token.content;
     auto index = std::distance(g_keywords.find(kw), g_keywords.end());
 
     // TODO: Maybe use an enum for more readability
     switch (index) {
-        case 1: // export
-            break;
-        case 2: // cd
-            command$cd(expr);
-            break;
-        case 3: // jobs
-            break;
+    case 1: // export
+        break;
+    case 2: // cd
+        command$cd(expr);
+        break;
+    case 3: // jobs
+        break;
     }
 }
 
-void handle$redirect_in(const std::shared_ptr<Expression>& redirect_in) {
-    if (redirect_in == nullptr) return;
+void handle$io_redirect(int fd, std::shared_ptr<Expression> const& redir) {
+    if (redir == nullptr)
+        return;
 
     auto filename = std::string {};
 
-    if (redirect_in->token.type == String || redirect_in->token.type == StickyLeft)
-        filename = redirect_in->token.content;
+    if (redir->token.type & (String | StickyLeft))
+        filename = redir->token.content;
     else
-        get$eval(filename, redirect_in->token);
-
-    auto file = open(filename.c_str(), O_RDONLY);
-
-    if (file < 0) {
-        std::cerr << filename << ": No such file or directory\n";
-        exit(1);
-    }
-
-    if (dup2(file, STDIN_FILENO) < 0) {
-        std::cerr << "dup2()\n";
-        exit(1);
-    }
-
-    close(file);
-}
-
-void handle$redirect_out(const std::shared_ptr<Expression>& redirect_out) {
-    if (redirect_out == nullptr) return;
-
-    auto filename = std::string {};
-
-    if (redirect_out->token.type == String || redirect_out->token.type == StickyLeft)
-        filename = redirect_out->token.content;
-    else
-        get$eval(filename, redirect_out->token);
+        get$eval(filename, redir->token);
 
     auto file = open(filename.c_str(), O_CREAT | O_WRONLY, 0644);
 
     if (file < 0)
-        std::cerr << filename << ": No such file or directory\n";
+        perror("open()");
 
-    if (dup2(file, STDOUT_FILENO) < 0) {
-        std::cerr << "dup2()\n";
+    if (dup2(file, fd) < 0) {
+        perror("dup2()");
         exit(1);
     }
 
@@ -145,32 +121,32 @@ void handle$redirect_out(const std::shared_ptr<Expression>& redirect_out) {
     close(file);
 }
 
-std::vector<std::string> handle$argv(const std::shared_ptr<Expression>& expr) {
+std::vector<std::string> handle$argv(std::shared_ptr<Expression> const& expr) {
     auto argv = std::vector<std::string> { expr->token.content };
     auto sticky = false;
 
-    for (auto& child : expr->children) {
+    for (auto const& child : expr->children) {
         switch (child->token.type) {
-            case StickyRight:
-            case Eval:
-            case String:
-            case StickyLeft:
-                handle$argv_strings(argv, sticky, child->token);
-                break;
-            case RedirectIn:
-                handle$redirect_in(child->children[0]);
-                break;
-            case RedirectOut:
-                handle$redirect_out(child->children[0]);
-                break;
+        case StickyRight:
+        case Eval:
+        case String:
+        case StickyLeft:
+            handle$argv_strings(argv, sticky, child->token);
+            break;
+        case RedirectIn:
+            handle$io_redirect(STDIN_FILENO, child->children[0]);
+            break;
+        case RedirectOut:
+            handle$io_redirect(STDOUT_FILENO, child->children[0]);
+            break;
         }
     }
 
     return argv;
 }
 
-template<typename T>
-Process execute(const std::shared_ptr<Expression>& expr, T&& child_hook) {
+template <typename T>
+Process execute(std::shared_ptr<Expression> const& expr, T&& child_hook) {
     auto pid = fork();
 
     if (pid < 0) {
@@ -184,8 +160,7 @@ Process execute(const std::shared_ptr<Expression>& expr, T&& child_hook) {
         std::transform(
             args.begin(), args.end(),
             std::back_inserter(argv),
-            [](const std::string& str) { return const_cast<char*>(str.c_str()); }
-        );
+            [](const std::string& str) { return const_cast<char*>(str.c_str()); });
 
         argv.push_back(NULL);
 
@@ -200,15 +175,15 @@ Process execute(const std::shared_ptr<Expression>& expr, T&& child_hook) {
     return Process { pid, get$pname(expr) };
 }
 
-template<typename T>
-void handle$executable(const std::shared_ptr<Expression>& expr, T&& hook) {
+template <typename T>
+void handle$executable(std::shared_ptr<Expression> const& expr, T&& hook) {
     auto proc = execute(expr, hook);
 
     waitpid(proc.pid, &g_exit_fg, 0);
 }
 
-void handle$background(const std::shared_ptr<Expression>& expr) {
-    auto proc = execute(expr->children[0], [=]{});
+void handle$background(std::shared_ptr<Expression> const& expr) {
+    auto proc = execute(expr->children[0], [=] {});
 
     std::cout << '[' << g_processes.size() + 1 << "] " << proc.pid << '\n';
 
@@ -216,11 +191,11 @@ void handle$background(const std::shared_ptr<Expression>& expr) {
     g_processes.push_back(Process { proc.pid, proc.name });
 }
 
-void handle$sequential(const std::shared_ptr<Expression>& expr) {
-    for (auto& child : expr->children) {
+void handle$sequential(std::shared_ptr<Expression> const& expr) {
+    for (auto const& child : expr->children) {
         auto proc = Process {};
 
-        proc = execute(child, [&]() -> void { });
+        proc = execute(child, [&]() -> void {});
 
         waitpid(proc.pid, &g_exit_fg, 0);
 
@@ -229,11 +204,11 @@ void handle$sequential(const std::shared_ptr<Expression>& expr) {
     }
 }
 
-template<typename T>
-void handle$pipe(const std::shared_ptr<Expression>& expr, T&& last_hook) {
+template <typename T>
+void handle$pipe(std::shared_ptr<Expression> const& expr, T&& last_hook) {
     auto last_io = Pipe {};
 
-    for (auto& child : expr->children) {
+    for (auto const& child : expr->children) {
         // TODO: Maybe figure out something other than this callback structure.
         auto proc = Process {};
         auto proc_io = Pipe {};
@@ -261,8 +236,7 @@ void handle$pipe(const std::shared_ptr<Expression>& expr, T&& last_hook) {
 
                 close(proc_io.fd[0]);
                 close(proc_io.fd[1]);
-            }
-        );
+            });
 
         if (child != expr->children.front()) {
             // Close the file descriptor in the parent process.
@@ -280,43 +254,42 @@ void handle$pipe(const std::shared_ptr<Expression>& expr, T&& last_hook) {
     }
 }
 
-template<typename T>
-void handle$ast(const std::shared_ptr<Expression>& ast, T&& hook) {
+template <typename T>
+void handle$ast(std::shared_ptr<Expression> const& ast, T&& hook) {
     switch (ast->token.type) {
-        case Key:
-            return handle$keyword(ast);
-        case Executable:
-            return handle$executable(ast, hook);
-        case Background:
-            return handle$background(ast);
-        case RedirectPipe:
-            return handle$pipe(ast, hook);
-        case SequentialIf:
-        case Sequential:
-            return handle$sequential(ast);
-        case Equal:
-            return command$set_env(ast);
-        default:
-            std::cerr << "Bad token type passed to handle$ast\n";
+    case Key:
+        return handle$keyword(ast);
+    case Executable:
+        return handle$executable(ast, hook);
+    case Background:
+        return handle$background(ast);
+    case RedirectPipe:
+        return handle$pipe(ast, hook);
+    case SequentialIf:
+    case Sequential:
+        return handle$sequential(ast);
+    case Equal:
+        return command$set_env(ast);
+    default:
+        std::cerr << "Bad token type passed to handle$ast\n";
     }
 }
 
-void handle$ast(const std::shared_ptr<Expression>& ast) {
-    #if DEBUG_AST
+void handle$ast(std::shared_ptr<Expression> const& ast) {
+#if DEBUG_AST
     std::cout << "--{AST Begin}--\n";
     BShell::ast$print(ast);
     std::cout << "--{AST End}--\n";
-    #endif
+#endif
 
-    handle$ast(ast, [=](){});
+    handle$ast(ast, [=]() {});
 }
 
 void erase_dead_children() {
     g_processes.erase(
         std::remove_if(
             g_processes.begin(), g_processes.end(),
-            [=](const Process& proc) -> bool { return waitpid(proc.pid, &g_exit_bg, WNOHANG) != 0; }
-        ), g_processes.end()
-    );
+            [=](Process const& proc) -> bool { return waitpid(proc.pid, &g_exit_bg, WNOHANG) != 0; }),
+        g_processes.end());
 }
 }

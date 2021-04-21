@@ -21,14 +21,13 @@ enum KEYWORD {
     CD
 };
 
-void set$cwd(std::string);
 void erase_dead_children();
 
-void handle$argv_strings(std::vector<std::string>&, bool&, Token);
+void handle$argv_strings(std::vector<std::string>&, bool&, Token const&);
 
-template<typename T>
-void handle$ast(const std::shared_ptr<Expression>&, T&&);
-void handle$ast(const std::shared_ptr<Expression>&);
+template <typename T>
+void handle$ast(std::shared_ptr<Expression> const&, T&&);
+void handle$ast(std::shared_ptr<Expression> const&);
 
 extern std::string g_prev_wd;
 extern std::vector<Process> g_processes;
