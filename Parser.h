@@ -16,11 +16,12 @@ struct Expression {
 
 class Parser {
 public:
-    Parser(std::vector<Token>&);
+    Parser(std::vector<Token>&&);
     std::vector<std::shared_ptr<Expression>> asts() const;
+
 private:
     void parse();
-    void add_strings(const std::shared_ptr<Expression>&);
+    void add_strings(std::shared_ptr<Expression> const&);
     void parse_background();
     void parse_sequential();
     void parse_redirection();
@@ -29,15 +30,14 @@ private:
 
     std::shared_ptr<Expression> glue_sticky();
 
-    Token* peek();
+    Token* peek() const;
 
     bool m_err;
     Token *m_cur, *m_next;
+
     std::vector<std::shared_ptr<Expression>> m_asts;
     std::vector<Token>& m_tokens;
 };
-
-std::vector<std::shared_ptr<Expression>> input$parse(std::vector<Token>&);
 
 void ast$print(std::shared_ptr<Expression>);
 }

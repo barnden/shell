@@ -6,19 +6,23 @@
 #include "Parser.h"
 #include "Tokenizer.h"
 
-#define PARSER_ERR(msg) { std::cerr << msg << '\n'; m_err = true; }
+#define PARSER_ERR(msg)           \
+    {                             \
+        std::cerr << msg << '\n'; \
+        m_err = true;             \
+    }
 
 namespace BShell {
-Expression::Expression() {}
-Expression::Expression(Token token) : token(token) {}
+Expression::Expression() { }
+Expression::Expression(Token token)
+    : token(token) { }
 
-Parser::Parser(std::vector<Token>& tokens) :
-    m_tokens(tokens),
-    m_cur(),
-    m_next(),
-    m_asts(),
-    m_err()
-{
+Parser::Parser(std::vector<Token>&& tokens)
+    : m_tokens(tokens)
+    , m_cur()
+    , m_next()
+    , m_asts()
+    , m_err() {
     parse();
 }
 
@@ -29,29 +33,24 @@ std::vector<std::shared_ptr<Expression>> Parser::asts() const {
 std::shared_ptr<Expression> Parser::glue_sticky() {
     auto expr = std::shared_ptr<Expression> {};
 
-    if (m_cur->type == StickyRight &&
-        peek() &&
-        (
-            peek()->type == String ||
-            peek()->type == StickyLeft
-        )
-    ) {
+    if (!peek())
+        return nullptr;
+
+    if (m_cur->type == StickyRight && peek()->type & (String | StickyLeft)) {
         expr = std::make_shared<Expression>(Token {
             String,
-            m_cur->content + peek()->content
-        });
+            m_cur->content + peek()->content });
 
         m_cur++;
     }
 
-    if (m_cur->type == String && peek() && peek()->type == StickyLeft) {
+    if (m_cur->type == String && peek()->type == StickyLeft) {
         if (expr)
             expr->token.content += peek()->content;
         else
             expr = std::make_shared<Expression>(Token {
                 String,
-                m_cur->content + peek()->content
-            });
+                m_cur->content + peek()->content });
 
         m_cur++;
     }
@@ -59,16 +58,11 @@ std::shared_ptr<Expression> Parser::glue_sticky() {
     return expr;
 }
 
-void Parser::add_strings(const std::shared_ptr<Expression>& expr) {
-    while (
-        (m_next = peek()) != nullptr &&
-        (
-            m_next->type == StickyRight ||
-            m_next->type == StickyLeft ||
-            m_next->type == String ||
-            m_next->type == Eval
-        )
-    ) {
+void Parser::add_strings(std::shared_ptr<Expression> const& expr) {
+    while ((m_next = peek()) != nullptr) {
+        if (!(m_next->type & (StickyRight | StickyLeft | String | Eval)))
+            break;
+
         m_cur++;
 
         auto glue = glue_sticky();
@@ -80,56 +74,53 @@ void Parser::add_strings(const std::shared_ptr<Expression>& expr) {
 void Parser::parse_background() {
     auto expr = std::shared_ptr<Expression> {};
 
-    if (m_asts.size() && m_asts.back()->token.type == Executable) {
-        expr = std::make_shared<Expression>(*m_cur);
+    if (!m_asts.size() || m_asts.back()->token.type != Executable)
+        PARSER_ERR("Syntax error near unexpected token '&'.");
 
-        expr.get()->children.push_back(m_asts.back());
+    expr = std::make_shared<Expression>(*m_cur);
 
-        m_asts.pop_back();
-        m_asts.push_back(expr);
-    } else PARSER_ERR("Syntax error near unexpected token '&'.");
+    expr.get()->children.push_back(m_asts.back());
+
+    m_asts.pop_back();
+    m_asts.push_back(expr);
 }
 
 void Parser::parse_current() {
     switch (m_cur->type) {
-        case Key:
-        case Executable: {
-            auto expr = std::make_shared<Expression>(*m_cur);
+    case Key:
+    case Executable: {
+        auto expr = std::make_shared<Expression>(*m_cur);
 
-            add_strings(expr);
-            m_asts.push_back(expr);
-            }
-            break;
-        case RedirectIn:
-        case RedirectOut:
-            parse_redirection();
-            break;
-        case RedirectPipe:
-        case SequentialIf:
-        case Sequential:
-            parse_sequential();
-            break;
-        case Equal:
-            parse_equal();
-            break;
-        case Background:
-            parse_background();
-            break;
-        case String:
-        case StickyRight:
-        case StickyLeft:
-            m_asts.push_back(std::make_shared<Expression>(*m_cur));
-            break;
+        add_strings(expr);
+        m_asts.push_back(expr);
+    } break;
+    case RedirectIn:
+    case RedirectOut:
+        parse_redirection();
+        break;
+    case RedirectPipe:
+    case SequentialIf:
+    case Sequential:
+        parse_sequential();
+        break;
+    case Equal:
+        parse_equal();
+        break;
+    case Background:
+        parse_background();
+        break;
+    case String:
+    case StickyRight:
+    case StickyLeft:
+        m_asts.push_back(std::make_shared<Expression>(*m_cur));
+        break;
     }
 }
 
 void Parser::parse_redirection() {
     // Redirections should always be the child of an executable.
-    if (m_asts.size() && (
-        m_asts.back()->token.type == RedirectPipe ||
-        m_asts.back()->token.type == Executable
-    )) {
-        if (m_next == nullptr || (m_next->type != Eval && m_next->type != String && m_next->type != StickyLeft)) {
+    if (m_asts.size() && (m_asts.back()->token.type & (RedirectPipe | Executable))) {
+        if (m_next == nullptr || !(m_next->type & (Eval | String | StickyLeft))) {
             // Should probably make a lookup for the token's corresponding char
             PARSER_ERR("Syntax error at unexpected redirection token.");
             return;
@@ -145,14 +136,16 @@ void Parser::parse_redirection() {
 
         expr->children.push_back(std::make_shared<Expression>(*++m_cur));
         exec->children.push_back(expr);
-    } else PARSER_ERR("Syntax error near unexpected redirection token.");
+    } else {
+        PARSER_ERR("Syntax error near unexpected redirection token.");
+    }
 }
 
 void Parser::parse_sequential() {
     auto type = m_cur->type;
 
     if (m_asts.size() && m_asts.back()->token.type != String) {
-        if (m_next == nullptr || (m_next->type != Executable && m_next->type != Key)) {
+        if (m_next == nullptr || !(m_next->type & (Executable | Key))) {
             // We do not currently support a continuation prompt
             PARSER_ERR("Syntax error at unexpected token '|'.");
             return;
@@ -180,24 +173,13 @@ void Parser::parse_sequential() {
         m_asts.pop_back();
 
         m_asts.push_back(expr);
-    } else PARSER_ERR("Syntax error near unexpected token '|'.");
+    } else
+        PARSER_ERR("Syntax error near unexpected token '|'.");
 }
 
 void Parser::parse_equal() {
-    if (m_asts.size() &&
-        (
-            m_asts.back()->token.type == String ||
-            m_asts.back()->token.type == StickyRight ||
-            m_asts.back()->token.type == StickyLeft
-        )
-    ) {
-        if (m_next == nullptr ||
-            (
-                m_next->type != String &&
-                m_next->type != StickyRight &&
-                m_next->type != StickyLeft
-            )
-        ) {
+    if (m_asts.size() && m_asts.back()->token.type & (String | StickyRight | StickyLeft)) {
+        if (m_next == nullptr || !(m_next->type & (String | StickyRight | StickyLeft))) {
             PARSER_ERR("Syntax error new unexpected token '='.")
             return;
         }
@@ -208,11 +190,13 @@ void Parser::parse_equal() {
 
         m_asts.pop_back();
         m_asts.push_back(expr);
-    } else PARSER_ERR("Syntax error near unexpected token '='.")
+    } else
+        PARSER_ERR("Syntax error near unexpected token '='.")
 }
 
 void Parser::parse() {
-    if (!m_tokens.size()) return;
+    if (!m_tokens.size())
+        return;
 
     m_cur = &*m_tokens.begin();
 
@@ -228,8 +212,11 @@ void Parser::parse() {
     }
 }
 
-Token* Parser::peek() {
-    return  &*m_tokens.end() != m_cur + 1 ? m_cur + 1 : nullptr;
+Token* Parser::peek() const {
+    if (&*m_tokens.end() != m_cur + 1)
+        return m_cur + 1;
+
+    return nullptr;
 }
 
 void ast$print(std::shared_ptr<Expression> expr, int depth) {
