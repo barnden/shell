@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <iostream>
+#include <unordered_map>
 #include <vector>
 
 #include <stdio.h>
@@ -20,22 +21,22 @@ namespace fs = std::filesystem;
 termios g_term, g_oterm;
 std::vector<std::string> g_history = std::vector<std::string> {};
 
-std::vector<std::string> g_token_colors = {
-    "\x1b[0m",  // NullToken
-    "\x1b[0m",  // String
-    "\x1b[0m",  // Equal
-    "\x1b[34m", // Executable
-    "\x1b[31m", // Background
-    "\x1b[31m", // Sequential
-    "\x1b[32m", // SequentialIf
-    "\x1b[32m", // RedirectPipe
-    "\x1b[32m", // RedirectOut
-    "\x1b[32m", // RedirectIn
-    "\x1b[34m", // Key
-    "\x1b[36m", // Eval
-    "\x1b[0m",  // StickyRight
-    "\x1b[0m",  // StickyLeft
-    "\x1b[0m",  // WhiteSpace
+std::unordered_map<TokenType, std::string> g_token_colors = {
+    { NullToken, "\x1b[0m" },
+    { String, "\x1b[0m" },
+    { Equal, "\x1b[0m" },
+    { Executable, "\x1b[34m" },
+    { Background, "\x1b[31m" },
+    { Sequential, "\x1b[31m" },
+    { SequentialIf, "\x1b[32m" },
+    { RedirectPipe, "\x1b[32m" },
+    { RedirectOut, "\x1b[32m" },
+    { RedirectIn, "\x1b[32m" },
+    { Key, "\x1b[34m" },
+    { Eval, "\x1b[36m" },
+    { StickyRight, "\x1b[0m" },
+    { StickyLeft, "\x1b[0m" },
+    { WhiteSpace, "\x1b[0m" },
 };
 
 void handle$sigint(int) {
@@ -47,8 +48,8 @@ std::string line$color(std::string input) {
     auto str = std::string {};
     auto tokens = Tokenizer(input, true).tokens();
 
-    for (auto &t : tokens)
-        str += g_token_colors[static_cast<std::size_t>(t.type)] + t.content;
+    for (auto& t : tokens)
+        str += g_token_colors[t.type] + t.content;
 
     return str + "\x1b[0m";
 }
@@ -107,9 +108,8 @@ void terminal$autocomplete(int* cursor, const std::string& prompt, std::string& 
         std::remove_if(filenames.begin(), filenames.end(),
             [=](std::string str) {
                 return str.size() < last.size() || str.substr(0, last.size()) != last;
-            }
-        ), filenames.end()
-    );
+            }),
+        filenames.end());
 
     if (filenames.size()) {
         line_buf += filenames[0].substr(last.size());
@@ -122,7 +122,7 @@ std::string get$input(std::string prompt) {
     auto c = char {};
     auto line_buf = std::string {};
     auto lup = false;
-    int cursor[2] = {0, 0};
+    int cursor[2] = { 0, 0 };
 
     terminal$control();
 
@@ -149,7 +149,7 @@ std::string get$input(std::string prompt) {
 
         if (c == g_term.c_cc[VERASE]) {
             // Backspace
-            if (line_buf.size() && cursor[0] > 0){
+            if (line_buf.size() && cursor[0] > 0) {
                 line_buf.erase(--cursor[0], 1);
                 line$reprint(prompt, line_buf, cursor[0] + prompt.size());
             }
