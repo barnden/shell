@@ -48,33 +48,35 @@ std::string line$color(std::string input) {
     auto str = std::string {};
     auto tokens = Tokenizer(input, true).tokens();
 
-    for (auto& t : tokens)
+    for (auto const& t : tokens)
         str += g_token_colors[t.type] + t.content;
 
     return str + "\x1b[0m";
 }
 
-void line$reprint(const std::string& prompt, const std::string& line_buf, int x) {
+void line$reprint(std::string const& prompt, std::string const& line_buf, int x) {
     std::cout
         << "\x1b[2K\r"
-        << prompt << line$color(line_buf);
+        << prompt
+        << line$color(line_buf);
 
     if (x > 0)
         std::cout << "\x1b[1G\x1b[" << std::to_string(x) << "C";
 }
 
-void history$prev(int* cursor, bool& lup, const std::string& prompt, std::string& line_buf) {
-    if (g_history.size() && cursor[1] < g_history.size()) {
-        lup = true;
+void history$prev(int* cursor, bool& lup, std::string const& prompt, std::string& line_buf) {
+    if (!g_history.size() || cursor[1] >= g_history.size())
+        return;
 
-        line_buf = *(g_history.rbegin() + cursor[1]++);
-        cursor[0] = line_buf.size();
+    lup = true;
 
-        line$reprint(prompt, line_buf, cursor[0] + prompt.size());
-    }
+    line_buf = *(g_history.rbegin() + cursor[1]++);
+    cursor[0] = line_buf.size();
+
+    line$reprint(prompt, line_buf, cursor[0] + prompt.size());
 }
 
-void history$next(int* cursor, bool& lup, const std::string& prompt, std::string& line_buf) {
+void history$next(int* cursor, bool& lup, std::string const& prompt, std::string& line_buf) {
     if (lup) {
         lup = false;
         cursor[1]--;
@@ -86,13 +88,13 @@ void history$next(int* cursor, bool& lup, const std::string& prompt, std::string
     line$reprint(prompt, line_buf, cursor[0] + prompt.size());
 }
 
-void terminal$autocomplete(int* cursor, const std::string& prompt, std::string& line_buf) {
+void terminal$autocomplete(int* cursor, std::string const& prompt, std::string& line_buf) {
     auto last = line_buf;
     auto find = size_t {};
     auto files = std::vector<fs::path> { fs::directory_iterator(get$cwd()), {} };
     auto filenames = std::vector<std::string> {};
 
-    for (auto& f : files) {
+    for (auto const& f : files) {
         auto path = f.string();
 
         if ((find = path.find_last_of('/')) != std::string::npos)
@@ -106,7 +108,7 @@ void terminal$autocomplete(int* cursor, const std::string& prompt, std::string& 
 
     filenames.erase(
         std::remove_if(filenames.begin(), filenames.end(),
-            [=](std::string str) {
+            [=](std::string const& str) {
                 return str.size() < last.size() || str.substr(0, last.size()) != last;
             }),
         filenames.end());
@@ -118,7 +120,7 @@ void terminal$autocomplete(int* cursor, const std::string& prompt, std::string& 
     }
 }
 
-std::string get$input(std::string prompt) {
+std::string get$input(std::string const& prompt) {
     auto c = char {};
     auto line_buf = std::string {};
     auto lup = false;

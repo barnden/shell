@@ -19,6 +19,7 @@ std::string parse$PS_format_string(char const& c) {
         return get$username() == "root" ? "#" : "$";
     case 'w': {
         auto cwd = get$cwd();
+
         if (cwd == "/")
             return cwd;
         else if (cwd == get$home())
@@ -49,5 +50,5 @@ std::string parse$PS(std::string const& PS) {
     return parsed;
 }
 
-const std::string get$PS1() { return parse$PS(PS1); }
+std::string const get$PS1() { return parse$PS(PS1); }
 }

@@ -5,7 +5,7 @@
 #include <termios.h>
 
 namespace BShell {
-std::string get$input(std::string);
+std::string get$input(std::string const&);
 void terminal$control();
 void terminal$restore();
 void handle$sigint(int);
