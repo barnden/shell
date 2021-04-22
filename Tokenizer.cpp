@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -9,13 +10,25 @@
 #include "System.h"
 #include "Tokenizer.h"
 
-const char* TokenNames[] = {
-    "NULL", "STRING", "EQUAL", "EXECUTABLE", "BACKGROUND", "SEQUENTIAL",
-    "SEQUENTIAL_CON", "PIPE", "REDIRECT_OUT", "REDIRECT_IN", "KEYWORD",
-    "EVAL", "STICKY_RIGHT", "STICKY_LEFT", "WHITESPACE"
+namespace BShell {
+std::unordered_map<TokenType, char*> TokenName = {
+    { NullToken, "NULL" },
+    { String, "STRING" },
+    { Equal, "EQUAL" },
+    { Executable, "EXECUTABLE" },
+    { Background, "BACKGROUND" },
+    { Sequential, "SEQUENTIAL" },
+    { SequentialIf, "SEQUENTIAL_CON" },
+    { RedirectPipe, "PIPE" },
+    { RedirectOut, "REDIRECT_OUT" },
+    { RedirectIn, "REDIRECT_IN" },
+    { Key, "KEYWORD" },
+    { Eval, "EVAL" },
+    { StickyRight, "STICKY_RIGHT" },
+    { StickyLeft, "STICKY_LEFT" },
+    { WhiteSpace, "WHITESPACE" }
 };
 
-namespace BShell {
 std::unordered_set<std::string> g_keywords = {
     "export", "cd", "jobs"
 };
@@ -205,8 +218,9 @@ void Tokenizer::tokenize_input() {
                 if (!m_force_string) {
                     type = Equal;
                     override_string = false;
-                } else
+                } else {
                     pass = true;
+                }
                 break;
             case ';':
                 type = Sequential;
@@ -215,8 +229,9 @@ void Tokenizer::tokenize_input() {
                 if (next && *next == '&') {
                     m_gobble = true;
                     type = SequentialIf;
-                } else
+                } else {
                     type = Background;
+                }
                 break;
             }
 
@@ -242,7 +257,7 @@ void Tokenizer::tokenize_input() {
 }
 
 std::ostream& operator<<(std::ostream& os, TokenType const& type) {
-    return (os << TokenNames[static_cast<uint16_t>(type)]);
+    return os << TokenName[type];
 }
 
 std::ostream& operator<<(std::ostream& os, Token const& token) {
