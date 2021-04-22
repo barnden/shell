@@ -33,8 +33,8 @@ void get$eval(std::string& str, Token const& token) {
         exit(1);
     }
 
-    for (auto const& ast : asts) {
-        handle$ast(ast, [&] {
+    for (auto&& ast : asts) {
+        handle$ast(std::move(ast), [&] {
             dup2(eval_io.fd[1], STDOUT_FILENO);
             std::cout.flush();
 
@@ -101,10 +101,11 @@ void handle$io_redirect(int fd, std::shared_ptr<Expression> const& redir) {
 
     auto filename = std::string {};
 
-    if (redir->token.type & (String | StickyLeft))
+    if (redir->token.type & (String | StickyLeft)) {
         filename = redir->token.content;
-    else
+    } else {
         get$eval(filename, redir->token);
+    }
 
     auto file = open(filename.c_str(), O_CREAT | O_WRONLY, 0644);
 
@@ -159,7 +160,7 @@ Process execute(std::shared_ptr<Expression> const& expr, T&& child_hook) {
         std::transform(
             args.begin(), args.end(),
             std::back_inserter(argv),
-            [](const std::string& str) { return const_cast<char*>(str.c_str()); });
+            [](std::string const& str) { return const_cast<char*>(str.c_str()); });
 
         argv.push_back(NULL);
 
@@ -252,7 +253,7 @@ void handle$pipe(std::shared_ptr<Expression> const& expr, T&& last_hook) {
 }
 
 template <typename T>
-void handle$ast(std::shared_ptr<Expression> const& ast, T&& hook) {
+void handle$ast(std::shared_ptr<Expression>&& ast, T&& hook) {
     switch (ast->token.type) {
     case Key:
         return handle$keyword(ast);
@@ -272,14 +273,14 @@ void handle$ast(std::shared_ptr<Expression> const& ast, T&& hook) {
     }
 }
 
-void handle$ast(std::shared_ptr<Expression> const& ast) {
+void handle$ast(std::shared_ptr<Expression>&& ast) {
 #if DEBUG_AST
     std::cout << "--{AST Begin}--\n";
     BShell::ast$print(ast);
     std::cout << "--{AST End}--\n";
 #endif
 
-    handle$ast(ast, [=]() {});
+    handle$ast(std::move(ast), [=]() {});
 }
 
 void erase_dead_children() {

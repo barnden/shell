@@ -51,8 +51,8 @@ int main(int argc, int* argv[]) {
             auto tokens = BShell::Tokenizer(input).tokens();
             auto asts = BShell::Parser(std::move(tokens)).asts();
 
-            for (auto ast : asts)
-                BShell::handle$ast(ast);
+            for (auto&& ast : asts)
+                BShell::handle$ast(std::move(ast));
         }
     }
 
