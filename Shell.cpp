@@ -28,7 +28,7 @@ void print$bgproc() {
 
 int main(int argc, int* argv[]) {
     if (signal(SIGINT, BShell::handle$sigint) == SIG_ERR) {
-        std::cerr << "Failed to bind SIGINT.\n";
+        perror("signal()");
         exit(1);
     }
 

@@ -51,7 +51,7 @@ std::string get$username() {
         buf = uptr.get();
 
         if (getlogin_r(buf, 32) != 0) {
-            std::cerr << "getlogin_r()\n";
+            perror("getlogin_r()");
             exit(1);
         }
     }
@@ -69,7 +69,7 @@ std::string get$hostname() {
         buf = uptr.get();
 
         if (gethostname(buf, 253) != 0) {
-            std::cerr << "gethostname()\n";
+            perror("gethostname()");
             exit(1);
         }
     }

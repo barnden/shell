@@ -29,7 +29,7 @@ void get$eval(std::string& str, Token const& token) {
     auto eval_io = Pipe {};
 
     if (pipe(eval_io.fd) < 0) {
-        std::cerr << "pipe()\n";
+        perror("pipe()");
         exit(1);
     }
 
@@ -150,8 +150,7 @@ Process execute(std::shared_ptr<Expression> const& expr, T&& child_hook) {
     auto pid = fork();
 
     if (pid < 0) {
-        std::cerr << "Failed to fork()\n";
-
+        perror("fork()");
         exit(1);
     } else if (!pid) {
         auto args = handle$argv(expr);
@@ -168,7 +167,7 @@ Process execute(std::shared_ptr<Expression> const& expr, T&& child_hook) {
 
         execvp(argv[0], &argv[0]);
 
-        std::cerr << "Failed to execvp()\n";
+        perror("execvp()");
         exit(1);
     }
 
@@ -214,8 +213,7 @@ void handle$pipe(std::shared_ptr<Expression> const& expr, T&& last_hook) {
         auto proc_io = Pipe {};
 
         if (pipe(proc_io.fd) < 0) {
-            std::cerr << "Unexpected error when opening pipe, proc_io.\n";
-
+            perror("pipe()");
             exit(1);
         }
 
@@ -247,8 +245,7 @@ void handle$pipe(std::shared_ptr<Expression> const& expr, T&& last_hook) {
         last_io = proc_io;
 
         if (waitpid(-1, &g_exit_fg, 0) < 0) {
-            std::cerr << "waitpid()\n";
-
+            perror("waitpid()");
             exit(1);
         }
     }

@@ -31,7 +31,7 @@ std::string parse$PS_format_string(char const& c) {
     }
 }
 
-std::string parse$PS(const std::string PS) {
+std::string parse$PS(std::string const& PS) {
     auto parsed = std::string {};
     auto gobble = false;
 
@@ -39,10 +39,11 @@ std::string parse$PS(const std::string PS) {
         if (gobble) {
             parsed += parse$PS_format_string(c);
             gobble = false;
-        } else if (c == '\\')
+        } else if (c == '\\') {
             gobble = true;
-        else
+        } else {
             parsed += c;
+        }
     }
 
     return parsed;
