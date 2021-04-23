@@ -1,7 +1,6 @@
-#include <string>
-
 #include <filesystem>
 #include <iostream>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -16,8 +15,6 @@
 #include "Tokenizer.h"
 
 namespace BShell {
-namespace fs = std::filesystem;
-
 termios g_term, g_oterm;
 std::vector<std::string> g_history = std::vector<std::string> {};
 
@@ -32,6 +29,24 @@ std::unordered_map<TokenType, std::string> g_token_colors = {
 void handle$sigint(int) {
     // We do not want the shell to exit on SIGINT
     // but we also do not want to SIG_IGN SIGINT.
+}
+
+void terminal$control() {
+    tcgetattr(STDIN_FILENO, &BShell::g_term);
+    BShell::g_oterm = BShell::g_term;
+
+    // Set terminal into raw mode
+    BShell::g_term.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+    BShell::g_term.c_oflag &= ~OPOST;
+    BShell::g_term.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+    tcsetattr(STDIN_FILENO, TCSANOW, &BShell::g_term);
+
+    std::cout.setf(std::ios::unitbuf);
+}
+
+void terminal$restore() {
+    tcsetattr(STDIN_FILENO, TCSANOW, &BShell::g_oterm);
+    std::cout.setf(~std::ios::unitbuf);
 }
 
 std::string line$color(std::string input) {
@@ -73,38 +88,6 @@ void history$next(int& x, int& y, bool& lup, std::string const& prompt, std::str
     x = input.size();
 
     line$reprint(prompt, input, x + prompt.size());
-}
-
-void terminal$autocomplete(int& x, std::string const& prompt, std::string& input, int c) {
-    auto last = input;
-    auto find = size_t {};
-    auto files = std::vector<fs::path> { fs::directory_iterator(get$cwd()), {} };
-    auto filenames = std::vector<std::string> {};
-
-    for (auto const& f : files) {
-        auto path = f.string();
-
-        if ((find = path.find_last_of('/')) != std::string::npos)
-            path = path.substr(find + 1);
-
-        filenames.push_back(path);
-    }
-
-    if ((find = input.find_last_of(' ')) != std::string::npos)
-        last = input.substr(find + 1);
-
-    filenames.erase(std::remove_if(filenames.begin(), filenames.end(),
-                                   [=](std::string const& str) {
-                                       return str.size() < last.size()
-                                              || str.substr(0, last.size()) != last;
-                                   }),
-                    filenames.end());
-
-    if (filenames.size()) {
-        input += filenames[0].substr(last.size());
-        x = input.size();
-        line$reprint(prompt, input, x + prompt.size());
-    }
 }
 
 void terminal$ansi_handler(std::string const& prompt, int& x, int& y, std::string& input,
@@ -193,11 +176,45 @@ void terminal$ansi_handler(std::string const& prompt, int& x, int& y, std::strin
     }
 }
 
+void terminal$autocomplete(int& x, std::string const& prompt, std::string& shadow,
+                           std::string& input, int c) {
+    auto last = shadow;
+    auto find = size_t {};
+    auto files
+        = std::vector<std::filesystem::path> { std::filesystem::directory_iterator(get$cwd()), {} };
+    auto fnames = std::vector<std::string> {};
+
+    std::transform(files.begin(), files.end(), std::back_inserter(fnames),
+                   [](std::filesystem::path const& path) { return path.filename(); });
+
+    if (!fnames.size())
+        return;
+
+    if ((find = shadow.find_last_of(' ')) != std::string::npos)
+        last = shadow.substr(find + 1);
+
+    fnames.erase(std::remove_if(fnames.begin(), fnames.end(),
+                                [=](std::string const& str) {
+                                    return str.size() < last.size()
+                                           || str.substr(0, last.size()) != last;
+                                }),
+                 fnames.end());
+
+    if (!fnames.size())
+        return;
+
+    auto index = c % fnames.size();
+    input = shadow + fnames[index].substr(last.size());
+    x = input.size();
+    line$reprint(prompt, input, x + prompt.size());
+}
+
 std::string get$input(std::string const& prompt) {
-    auto c = char {};
+    auto chr = char {};
     auto input = std::string {};
-    auto x = 0, y = 0;
-    auto tabc = 0;
+    auto shadow = std::string {};
+
+    auto x = 0, y = 0, z = 0;
     auto lup = false;
 
     terminal$control();
@@ -205,39 +222,41 @@ std::string get$input(std::string const& prompt) {
     // Print prompt string before starting loop
     std::cout << "\x1b[2K\x1b[1G" << prompt;
 
-    while (read(STDIN_FILENO, &c, 1) == 1) {
+    while (read(STDIN_FILENO, &chr, 1) == 1) {
         // termios::c_cc is runtime; no switches ;(
-        if (c == g_term.c_cc[VEOF]) {
+        if (chr == g_term.c_cc[VEOF]) {
             // CTRL+D (EOF)
             std::cout << "^D\x1b[1G\nbrandon shell exited\n\x1b[2K\x1b[1G";
             return "\x1b[EOF";
         }
 
-        if (c == g_term.c_cc[VINTR]) {
+        if (chr == g_term.c_cc[VINTR]) {
             // CTRL+C (SIGINT)
             std::cout << "^C\n\x1b[1G" << prompt;
 
-            x = 0;
-            input = "";
+            x = y = z = 0;
+            input = shadow = "";
 
             continue;
         }
 
-        if (c == g_term.c_cc[VERASE]) {
+        if (chr == g_term.c_cc[VERASE]) {
             // Backspace
             if (input.size() && x) {
                 input.erase(--x, 1);
+                shadow = input;
+                z = 0;
                 line$reprint(prompt, input, x + prompt.size());
             }
 
             continue;
         }
 
-        if (c == 23) {
+        if (chr == 23) {
             // CTRL+Backspace
         }
 
-        if (c == '\r') {
+        if (chr == '\r') {
             // Return
             std::cout << "\n\x1b[2K\x1b[1G";
             terminal$restore();
@@ -245,44 +264,29 @@ std::string get$input(std::string const& prompt) {
             return input;
         }
 
-        if (c == '\t') {
+        if (chr == '\t') {
             // Tab
-            terminal$autocomplete(x, prompt, input, ++tabc);
+            terminal$autocomplete(x, prompt, shadow, input, z++);
             continue;
         }
 
-        if (c == '\x1b') {
+        if (chr == '\x1b') {
             // ANSI control characters
+            shadow = input;
+            z = 0;
             terminal$ansi_handler(prompt, x, y, input, lup);
             continue;
         }
 
-        input.insert(x, 1, c);
+        input.insert(x, 1, chr);
+        shadow = input;
 
         x++;
-        y = 0;
+        y = z = 0;
 
         line$reprint(prompt, input, x + prompt.size());
     }
 
     return input;
-}
-
-void terminal$control() {
-    tcgetattr(STDIN_FILENO, &BShell::g_term);
-    BShell::g_oterm = BShell::g_term;
-
-    // Set terminal into raw mode
-    BShell::g_term.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-    BShell::g_term.c_oflag &= ~OPOST;
-    BShell::g_term.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
-    tcsetattr(STDIN_FILENO, TCSANOW, &BShell::g_term);
-
-    std::cout.setf(std::ios::unitbuf);
-}
-
-void terminal$restore() {
-    tcsetattr(STDIN_FILENO, TCSANOW, &BShell::g_oterm);
-    std::cout.setf(~std::ios::unitbuf);
 }
 }
