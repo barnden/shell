@@ -176,35 +176,27 @@ void terminal$ansi_handler(std::string const& prompt, int& x, int& y, std::strin
     }
 }
 
-void terminal$autocomplete(int& x, std::string const& prompt, std::string& shadow,
-                           std::string& input, int c) {
-    auto last = shadow;
-    auto find = size_t {};
+bool terminal$cache_fnames(std::string const& shadow, std::vector<std::string>& fnames) {
     auto files
         = std::vector<std::filesystem::path> { std::filesystem::directory_iterator(get$cwd()), {} };
-    auto fnames = std::vector<std::string> {};
+
+    if (!files.size())
+        return false;
 
     std::transform(files.begin(), files.end(), std::back_inserter(fnames),
                    [](std::filesystem::path const& path) { return path.filename(); });
 
+    return !!fnames.size();
+}
+
+void terminal$autocomplete(int& x, std::vector<std::string>& fnames, std::string const& prompt,
+                           std::string& shadow, std::string& input, int c) {
     if (!fnames.size())
-        return;
-
-    if ((find = shadow.find_last_of(' ')) != std::string::npos)
-        last = shadow.substr(find + 1);
-
-    fnames.erase(std::remove_if(fnames.begin(), fnames.end(),
-                                [=](std::string const& str) {
-                                    return str.size() < last.size()
-                                           || str.substr(0, last.size()) != last;
-                                }),
-                 fnames.end());
-
-    if (!fnames.size())
-        return;
+        if (!terminal$cache_fnames(shadow, fnames))
+            return;
 
     auto index = c % fnames.size();
-    input = shadow + fnames[index].substr(last.size());
+    input = shadow + fnames[index];
     x = input.size();
     line$reprint(prompt, input, x + prompt.size());
 }
@@ -213,6 +205,7 @@ std::string get$input(std::string const& prompt) {
     auto chr = char {};
     auto input = std::string {};
     auto shadow = std::string {};
+    auto fname_cache = std::vector<std::string> {};
 
     auto x = 0, y = 0, z = 0;
     auto lup = false;
@@ -266,7 +259,7 @@ std::string get$input(std::string const& prompt) {
 
         if (chr == '\t') {
             // Tab
-            terminal$autocomplete(x, prompt, shadow, input, z++);
+            terminal$autocomplete(x, fname_cache, prompt, shadow, input, z++);
             continue;
         }
 
