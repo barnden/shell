@@ -1,3 +1,4 @@
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -141,7 +142,7 @@ std::vector<std::string> handle$argv(std::shared_ptr<Expression> const& expr) {
     return argv;
 }
 
-template <typename T> Process execute(std::shared_ptr<Expression> const& expr, T&& child_hook) {
+Process execute(std::shared_ptr<Expression> const& expr, std::function<void()> child_hook) {
     auto pid = fork();
 
     if (pid < 0) {
@@ -167,7 +168,7 @@ template <typename T> Process execute(std::shared_ptr<Expression> const& expr, T
     return Process { pid, get$pname(expr) };
 }
 
-template <typename T> void handle$executable(std::shared_ptr<Expression> const& expr, T&& hook) {
+void handle$executable(std::shared_ptr<Expression> const& expr, std::function<void()> hook) {
     auto proc = execute(expr, hook);
 
     waitpid(proc.pid, &g_exit_fg, 0);
@@ -195,7 +196,7 @@ void handle$sequential(std::shared_ptr<Expression> const& expr) {
     }
 }
 
-template <typename T> void handle$pipe(std::shared_ptr<Expression> const& expr, T&& last_hook) {
+void handle$pipe(std::shared_ptr<Expression> const& expr, std::function<void()> last_hook) {
     auto last_io = Pipe {};
 
     for (auto const& child : expr->children) {
@@ -241,7 +242,7 @@ template <typename T> void handle$pipe(std::shared_ptr<Expression> const& expr, 
     }
 }
 
-template <typename T> void handle$ast(std::shared_ptr<Expression>&& ast, T&& hook) {
+void handle$ast(std::shared_ptr<Expression>&& ast, std::function<void()> hook) {
     switch (ast->token.type) {
     case Key:
         return handle$keyword(ast);

@@ -21,7 +21,7 @@ void erase_dead_children();
 
 void handle$argv_strings(std::vector<std::string>&, bool&, Token const&);
 
-template <typename T> void handle$ast(std::shared_ptr<Expression>&&, T&&);
+void handle$ast(std::shared_ptr<Expression>&& ast, std::function<void()> hook);
 void handle$ast(std::shared_ptr<Expression>&&);
 
 extern std::string g_prev_wd;
