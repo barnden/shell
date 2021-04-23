@@ -1,9 +1,12 @@
 Standard: Cpp11
 BasedOnStyle: WebKit
 IndentWidth: 4
-ColumnLimit: 0
+ColumnLimit: 100
 AccessModifierOffset: -4
 NamespaceIndentation: Inner
+AlignOperands: Align
+AlignConsecutiveMacros: true
+AlignAfterOpenBracket: Align
 AllowShortFunctionsOnASingleLine: All
 AllowShortEnumsOnASingleLine: true
 BreakConstructorInitializers: BeforeComma
