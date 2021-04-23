@@ -21,10 +21,8 @@ void command$cd(std::shared_ptr<Expression> const& expr) {
     for (auto const& child : expr->children)
         handle$argv_strings(args, sticky, child->token);
 
-    std::transform(
-        args.begin(), args.end(),
-        std::back_inserter(argv),
-        [](std::string const& str) { return const_cast<char*>(str.c_str()); });
+    std::transform(args.begin(), args.end(), std::back_inserter(argv),
+                   [](std::string const& str) { return const_cast<char*>(str.c_str()); });
 
     auto* dir = argv.size() ? argv[0] : nullptr;
     auto cwd = get$cwd();

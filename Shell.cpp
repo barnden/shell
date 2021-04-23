@@ -15,14 +15,12 @@
 #include "Terminal.h"
 
 void print$bgproc() {
-    for (auto& proc : BShell::g_processes) {
+    for (auto const& proc : BShell::g_processes) {
         if (waitpid(proc.pid, &BShell::g_exit_bg, WNOHANG) == 0)
             continue;
 
-        std::cout
-            << '[' << (&proc - &*BShell::g_processes.begin() + 1) << "] Done "
-            << proc.name
-            << '\n';
+        std::cout << '[' << (&proc - &*BShell::g_processes.begin() + 1) << "] Done " << proc.name
+                  << '\n';
     }
 }
 

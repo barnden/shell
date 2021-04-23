@@ -77,7 +77,7 @@ std::string get$hostname() {
     return std::string { buf };
 }
 
-std::string get$pname(pid_t pid) {
+std::string get$pname(pid_t const& pid) {
     auto proc = std::ifstream("/proc/" + std::to_string(pid) + "/cmdline");
 
     return std::string { std::istreambuf_iterator { proc.rdbuf() }, {} };
@@ -98,7 +98,7 @@ std::string get$pname(std::shared_ptr<Expression> const& expr) {
     return pname;
 }
 
-std::string get$executable_path(std::string cmd) {
+std::string get$executable_path(std::string const& cmd) {
     // Scans the path for executables that match the given string
 
     auto env_path = std::string(getenv("PATH"));
