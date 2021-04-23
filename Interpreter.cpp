@@ -22,11 +22,12 @@ namespace BShell {
 std::vector<Process> g_processes;
 int g_exit_fg = 0, g_exit_bg = 0;
 
-void get$eval(std::string& str, Token const& token) {
+std::string get$eval(Token const& token) {
     // Recursively tokenize and parse eval string until we get something
     auto tokens = Tokenizer(token.content.c_str()).tokens();
     auto asts = Parser(std::move(tokens)).asts();
     auto eval_io = Pipe {};
+    auto str = std::string {};
 
     if (pipe(eval_io.fd) < 0) {
         perror("pipe()");
@@ -53,15 +54,15 @@ void get$eval(std::string& str, Token const& token) {
         str += std::string { buf.get() };
 
     close(eval_io.fd[0]);
+
+    return str;
 }
 
 void handle$argv_strings(std::vector<std::string>& argv, bool& sticky, Token const& token) {
-    auto str = std::string {};
+    auto str = token.content;
 
     if (token.type == Eval)
-        get$eval(str, token);
-    else
-        str = token.content;
+        str = get$eval(token);
 
     if (sticky || token.type & StickyLeft) {
         sticky = false;
@@ -74,7 +75,8 @@ void handle$argv_strings(std::vector<std::string>& argv, bool& sticky, Token con
         sticky = true;
 
     // Remove unprintable control characters like SOH, STX, ETX, etc.
-    str.erase(std::remove_if(str.begin(), str.end(), [=](int c) { return !std::isprint(c); }), str.end());
+    str.erase(std::remove_if(str.begin(), str.end(), [=](int c) { return !std::isprint(c); }),
+              str.end());
 
     argv.push_back(str);
 }
@@ -99,13 +101,10 @@ void handle$io_redirect(int fd, std::shared_ptr<Expression> const& redir) {
     if (redir == nullptr)
         return;
 
-    auto filename = std::string {};
+    auto filename = redir->token.content;
 
-    if (redir->token.type & (String | StickyLeft)) {
-        filename = redir->token.content;
-    } else {
-        get$eval(filename, redir->token);
-    }
+    if (!(redir->token.type & (String | StickyLeft)))
+        filename = get$eval(redir->token);
 
     auto file = open(filename.c_str(), O_CREAT | O_WRONLY, 0644);
 
@@ -146,8 +145,7 @@ std::vector<std::string> handle$argv(std::shared_ptr<Expression> const& expr) {
     return argv;
 }
 
-template <typename T>
-Process execute(std::shared_ptr<Expression> const& expr, T&& child_hook) {
+template <typename T> Process execute(std::shared_ptr<Expression> const& expr, T&& child_hook) {
     auto pid = fork();
 
     if (pid < 0) {
@@ -157,10 +155,8 @@ Process execute(std::shared_ptr<Expression> const& expr, T&& child_hook) {
         auto args = handle$argv(expr);
         auto argv = std::vector<char*> {};
 
-        std::transform(
-            args.begin(), args.end(),
-            std::back_inserter(argv),
-            [](std::string const& str) { return const_cast<char*>(str.c_str()); });
+        std::transform(args.begin(), args.end(), std::back_inserter(argv),
+                       [](std::string const& str) { return const_cast<char*>(str.c_str()); });
 
         argv.push_back(NULL);
 
@@ -175,8 +171,7 @@ Process execute(std::shared_ptr<Expression> const& expr, T&& child_hook) {
     return Process { pid, get$pname(expr) };
 }
 
-template <typename T>
-void handle$executable(std::shared_ptr<Expression> const& expr, T&& hook) {
+template <typename T> void handle$executable(std::shared_ptr<Expression> const& expr, T&& hook) {
     auto proc = execute(expr, hook);
 
     waitpid(proc.pid, &g_exit_fg, 0);
@@ -204,8 +199,7 @@ void handle$sequential(std::shared_ptr<Expression> const& expr) {
     }
 }
 
-template <typename T>
-void handle$pipe(std::shared_ptr<Expression> const& expr, T&& last_hook) {
+template <typename T> void handle$pipe(std::shared_ptr<Expression> const& expr, T&& last_hook) {
     auto last_io = Pipe {};
 
     for (auto const& child : expr->children) {
@@ -218,24 +212,23 @@ void handle$pipe(std::shared_ptr<Expression> const& expr, T&& last_hook) {
             exit(1);
         }
 
-        proc = execute(child,
-            [&]() -> void {
-                // This entire lambda function executes within the child process.
-                if (child != expr->children.front()) {
-                    dup2(last_io.fd[0], STDIN_FILENO);
+        proc = execute(child, [&]() -> void {
+            // This entire lambda function executes within the child process.
+            if (child != expr->children.front()) {
+                dup2(last_io.fd[0], STDIN_FILENO);
 
-                    close(last_io.fd[0]);
-                    close(last_io.fd[1]);
-                }
+                close(last_io.fd[0]);
+                close(last_io.fd[1]);
+            }
 
-                if (child != expr->children.back())
-                    dup2(proc_io.fd[1], STDOUT_FILENO);
-                else
-                    last_hook();
+            if (child != expr->children.back())
+                dup2(proc_io.fd[1], STDOUT_FILENO);
+            else
+                last_hook();
 
-                close(proc_io.fd[0]);
-                close(proc_io.fd[1]);
-            });
+            close(proc_io.fd[0]);
+            close(proc_io.fd[1]);
+        });
 
         if (child != expr->children.front()) {
             // Close the file descriptor in the parent process.
@@ -252,8 +245,7 @@ void handle$pipe(std::shared_ptr<Expression> const& expr, T&& last_hook) {
     }
 }
 
-template <typename T>
-void handle$ast(std::shared_ptr<Expression>&& ast, T&& hook) {
+template <typename T> void handle$ast(std::shared_ptr<Expression>&& ast, T&& hook) {
     switch (ast->token.type) {
     case Key:
         return handle$keyword(ast);
@@ -284,10 +276,10 @@ void handle$ast(std::shared_ptr<Expression>&& ast) {
 }
 
 void erase_dead_children() {
-    g_processes.erase(
-        std::remove_if(
-            g_processes.begin(), g_processes.end(),
-            [=](Process const& proc) -> bool { return waitpid(proc.pid, &g_exit_bg, WNOHANG) != 0; }),
-        g_processes.end());
+    g_processes.erase(std::remove_if(g_processes.begin(), g_processes.end(),
+                                     [=](Process const& proc) -> bool {
+                                         return waitpid(proc.pid, &g_exit_bg, WNOHANG) != 0;
+                                     }),
+                      g_processes.end());
 }
 }
