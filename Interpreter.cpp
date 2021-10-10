@@ -103,7 +103,10 @@ void handle$io_redirect(int fd, std::shared_ptr<Expression> const& redir) {
     if (!(redir->token.type & (String | StickyLeft)))
         filename = get$eval(redir->token);
 
-    auto file = open(filename.c_str(), O_CREAT | O_WRONLY, 0644);
+    auto flags = O_CREAT;
+    flags |= (fd == STDIN_FILENO) ? O_RDWR : O_WRONLY;
+
+    auto file = open(filename.c_str(), flags, 0644);
 
     if (file < 0)
         perror("open()");
